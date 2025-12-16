@@ -11,24 +11,20 @@ interface PosterCardProps {
 }
 
 export default function PosterCard({ poster, onClick, onFavorite, onReject }: PosterCardProps) {
-    const statusStyles = {
-        generated: '',
-        favorite: 'ring-2 ring-amber-400',
-        rejected: 'opacity-50',
-        archived: 'opacity-30',
-    };
-
     return (
         <div
             className={`
-        relative group cursor-pointer rounded-xl overflow-hidden bg-card border border-subtle 
-        hover:border-accent-primary transition-all break-inside-avoid mb-4
-        ${statusStyles[poster.status]}
+        relative group cursor-pointer rounded-xl overflow-hidden
+        bg-[var(--bg-card)] border border-[var(--border-subtle)]
+        hover:border-[var(--accent-primary)] hover:shadow-lg
+        transition-all duration-200 break-inside-avoid mb-4
+        ${poster.status === 'rejected' ? 'opacity-50 hover:opacity-100' : ''}
+        ${poster.status === 'favorite' ? 'ring-2 ring-amber-400/50' : ''}
       `}
             onClick={onClick}
         >
             {/* Image */}
-            <div className="relative aspect-[3/4] bg-bg-hover">
+            <div className="relative aspect-[3/4] bg-[var(--bg-hover)]">
                 {poster.image_url ? (
                     <img
                         src={poster.image_url}
@@ -36,51 +32,51 @@ export default function PosterCard({ poster, onClick, onFavorite, onReject }: Po
                         className="w-full h-full object-cover"
                     />
                 ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <ImageIcon size={32} className="text-tertiary" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-violet-500/20 to-blue-500/20">
+                        <ImageIcon size={32} className="text-[var(--text-tertiary)]" />
                     </div>
                 )}
 
                 {/* Overlay Actions */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center">
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5">
                             <button
                                 onClick={(e) => { e.stopPropagation(); onFavorite(); }}
                                 className={`
-                  p-2 rounded-lg transition-colors
+                  p-2 rounded-lg backdrop-blur-sm transition-all
                   ${poster.status === 'favorite'
-                                        ? 'bg-amber-500 text-white'
-                                        : 'bg-white/20 text-white hover:bg-white/30'}
+                                        ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
+                                        : 'bg-white/15 text-white hover:bg-white/25'}
                 `}
                                 title="Favorite"
                             >
-                                <Star size={16} fill={poster.status === 'favorite' ? 'currentColor' : 'none'} />
+                                <Star size={14} fill={poster.status === 'favorite' ? 'currentColor' : 'none'} />
                             </button>
                             <button
                                 onClick={(e) => { e.stopPropagation(); onReject(); }}
                                 className={`
-                  p-2 rounded-lg transition-colors
+                  p-2 rounded-lg backdrop-blur-sm transition-all
                   ${poster.status === 'rejected'
-                                        ? 'bg-red-500 text-white'
-                                        : 'bg-white/20 text-white hover:bg-white/30'}
+                                        ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                                        : 'bg-white/15 text-white hover:bg-white/25'}
                 `}
                                 title="Reject"
                             >
-                                <X size={16} />
+                                <X size={14} />
                             </button>
                         </div>
 
-                        <span className="text-white/80 text-xs">
-                            Seed: {poster.seed}
+                        <span className="text-white/70 text-[10px] font-mono bg-black/30 px-2 py-1 rounded backdrop-blur-sm">
+                            {poster.seed}
                         </span>
                     </div>
                 </div>
 
                 {/* Status Badge */}
                 {poster.status === 'favorite' && (
-                    <div className="absolute top-2 right-2 p-1.5 bg-amber-500 rounded-full">
-                        <Star size={12} className="text-white" fill="currentColor" />
+                    <div className="absolute top-2 right-2 p-1.5 bg-amber-500 rounded-full shadow-lg shadow-amber-500/30">
+                        <Star size={10} className="text-white" fill="currentColor" />
                     </div>
                 )}
             </div>
