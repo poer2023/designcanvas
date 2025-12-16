@@ -6,6 +6,7 @@ import {
     ArrowLeft, Save, Play, Square, FileJson, ZoomIn, ZoomOut,
     Maximize2, Grid, Settings, ChevronDown, Share2
 } from 'lucide-react';
+import ThemeToggle from '@/components/layout/ThemeToggle';
 import dynamic from 'next/dynamic';
 import type { Project } from '@/types';
 import { useGraphStore } from '@/store/graphStore';
@@ -71,9 +72,9 @@ export default function ProjectPage() {
     if (!project) return null;
 
     return (
-        <div className="fixed inset-0 flex flex-col bg-[#0a0a0a] overflow-hidden">
+        <div className="fixed inset-0 flex flex-col bg-app overflow-hidden">
             {/* Minimal Top Toolbar */}
-            <header className="h-12 bg-[#141414] border-b border-[#252525] flex items-center justify-between px-3 shrink-0 z-50">
+            <header className="h-12 bg-panel border-b border-subtle flex items-center justify-between px-3 shrink-0 z-50">
                 {/* Left Section */}
                 <div className="flex items-center gap-3">
                     <button
@@ -99,6 +100,8 @@ export default function ProjectPage() {
 
                 {/* Center Section - Zoom & View Controls */}
                 <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1">
+                    {/* Theme Toggle */}
+                    <ThemeToggle />
                     <button
                         onClick={() => setZoom(Math.max(25, zoom - 25))}
                         className="p-1.5 rounded text-[#888] hover:text-white hover:bg-[#252525] transition-colors"
