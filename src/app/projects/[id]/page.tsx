@@ -3,33 +3,24 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-    ArrowLeft, Save, Settings, FileJson,
-    Workflow, Image as ImageIcon, Sparkles, PenTool, LayoutGrid
+    ArrowLeft, Save, Play, Square, FileJson, ZoomIn, ZoomOut,
+    Maximize2, Grid, Settings, ChevronDown, Share2
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import type { Project } from '@/types';
 import { useGraphStore } from '@/store/graphStore';
 import { executeGraph, ExecutionLog } from '@/lib/engine/executor';
 
-// Lazy load heavy components
 const SkillGraphCanvas = dynamic(() => import('@/components/graph/SkillGraphCanvas'), { ssr: false });
-const GalleryPage = dynamic(() => import('@/app/gallery/page'), { ssr: false });
-const ComposeCanvas = dynamic(() => import('@/components/compose/ComposeCanvas'), { ssr: false });
-const InspirationPage = dynamic(() => import('@/app/inspiration/page'), { ssr: false });
-
-type EditorMode = 'graph' | 'inspiration' | 'gallery' | 'canvas';
 
 export default function ProjectPage() {
     const params = useParams();
     const router = useRouter();
     const [project, setProject] = useState<Project | null>(null);
     const [loading, setLoading] = useState(true);
-    const [mode, setMode] = useState<EditorMode>('graph');
-
-    // Graph State
-    const [saving, setSaving] = useState(false);
-    const [logs, setLogs] = useState<ExecutionLog[]>([]);
+    const [zoom, setZoom] = useState(100);
     const [showLogs, setShowLogs] = useState(false);
+    const [logs, setLogs] = useState<ExecutionLog[]>([]);
     const stopExecutionRef = useRef(false);
     const { nodes, edges, isRunning, setIsRunning, updateNodeStatus } = useGraphStore();
 
@@ -65,163 +56,167 @@ export default function ProjectPage() {
         setIsRunning(false);
     }, [nodes, edges, setIsRunning, updateNodeStatus]);
 
-    if (loading) return (
-        <div className="flex h-screen items-center justify-center">
-            <div className="w-8 h-8 border-2 border-border-default border-t-accent-primary rounded-full animate-spin" />
-        </div>
-    );
+    const handleStop = useCallback(() => {
+        stopExecutionRef.current = true;
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="fixed inset-0 flex items-center justify-center bg-[#0a0a0a]">
+                <div className="w-8 h-8 border-2 border-[#333] border-t-blue-500 rounded-full animate-spin" />
+            </div>
+        );
+    }
 
     if (!project) return null;
 
     return (
-        <div className="h-screen flex flex-col bg-app overflow-hidden">
-            {/* Unified Toolbar */}
-            <div className="h-14 border-b border-subtle bg-panel flex items-center justify-between px-4 shrink-0 z-30">
-                <div className="flex items-center gap-4">
+        <div className="fixed inset-0 flex flex-col bg-[#0a0a0a] overflow-hidden">
+            {/* Minimal Top Toolbar */}
+            <header className="h-12 bg-[#141414] border-b border-[#252525] flex items-center justify-between px-3 shrink-0 z-50">
+                {/* Left Section */}
+                <div className="flex items-center gap-3">
                     <button
                         onClick={() => router.push('/')}
-                        className="p-2 rounded-lg hover:bg-bg-hover text-secondary hover:text-primary transition-colors"
+                        className="p-2 rounded-lg text-[#888] hover:text-white hover:bg-[#252525] transition-colors"
                         title="Back to Projects"
                     >
                         <ArrowLeft size={18} />
                     </button>
 
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center text-white font-bold text-xs">
+                    <div className="w-px h-6 bg-[#252525]" />
+
+                    <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center text-white font-bold text-[10px]">
                             {project.name.substring(0, 2).toUpperCase()}
                         </div>
-                        <div>
-                            <h1 className="text-sm font-semibold leading-none mb-1">{project.name}</h1>
-                            <div className="flex items-center gap-1.5 text-[11px] text-tertiary">
-                                <span className="bg-bg-hover px-1.5 rounded">v1.0.0</span>
-                                <span>Edited just now</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Mode Switcher (Replica of Figma's top center toggle) */}
-                    <div className="bg-bg-hover p-1 rounded-lg flex items-center gap-1 ml-8">
-                        <ModeTab
-                            active={mode === 'graph'}
-                            onClick={() => setMode('graph')}
-                            icon={Workflow}
-                            label="Logic"
-                        />
-                        <ModeTab
-                            active={mode === 'inspiration'}
-                            onClick={() => setMode('inspiration')}
-                            icon={Sparkles}
-                            label="Inspire"
-                        />
-                        <ModeTab
-                            active={mode === 'gallery'}
-                            onClick={() => setMode('gallery')}
-                            icon={ImageIcon}
-                            label="Gallery"
-                        />
-                        <ModeTab
-                            active={mode === 'canvas'}
-                            onClick={() => setMode('canvas')}
-                            icon={PenTool}
-                            label="Canvas"
-                        />
+                        <button className="flex items-center gap-1.5 text-sm text-white hover:bg-[#252525] px-2 py-1 rounded transition-colors">
+                            <span className="font-medium">{project.name}</span>
+                            <ChevronDown size={14} className="text-[#666]" />
+                        </button>
                     </div>
                 </div>
 
+                {/* Center Section - Zoom & View Controls */}
+                <div className="flex items-center gap-1 bg-[#1a1a1a] rounded-lg p-1">
+                    <button
+                        onClick={() => setZoom(Math.max(25, zoom - 25))}
+                        className="p-1.5 rounded text-[#888] hover:text-white hover:bg-[#252525] transition-colors"
+                    >
+                        <ZoomOut size={14} />
+                    </button>
+                    <span className="text-xs text-[#888] w-12 text-center font-mono">{zoom}%</span>
+                    <button
+                        onClick={() => setZoom(Math.min(200, zoom + 25))}
+                        className="p-1.5 rounded text-[#888] hover:text-white hover:bg-[#252525] transition-colors"
+                    >
+                        <ZoomIn size={14} />
+                    </button>
+                    <div className="w-px h-4 bg-[#333] mx-1" />
+                    <button
+                        onClick={() => setZoom(100)}
+                        className="p-1.5 rounded text-[#888] hover:text-white hover:bg-[#252525] transition-colors"
+                        title="Fit to screen"
+                    >
+                        <Maximize2 size={14} />
+                    </button>
+                    <button
+                        className="p-1.5 rounded text-[#888] hover:text-white hover:bg-[#252525] transition-colors"
+                        title="Toggle grid"
+                    >
+                        <Grid size={14} />
+                    </button>
+                </div>
+
+                {/* Right Section */}
                 <div className="flex items-center gap-2">
-                    {mode === 'graph' && (
-                        <>
-                            <button
-                                onClick={() => setShowLogs(!showLogs)}
-                                className={`btn btn-ghost h-8 px-2 ${showLogs ? 'bg-accent-subtle text-accent-primary' : ''}`}
-                                title="Execution Logs"
-                            >
-                                <FileJson size={16} />
-                            </button>
-                            <button
-                                onClick={isRunning ? () => stopExecutionRef.current = true : handleRunGraph}
-                                className={`btn h-8 px-4 ${isRunning ? 'bg-red-500 hover:bg-red-600 text-white' : 'btn-primary'}`}
-                            >
-                                {isRunning ? (
-                                    <>
-                                        <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                                        <span>Running...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Workflow size={14} />
-                                        <span>Run Graph</span>
-                                    </>
-                                )}
-                            </button>
-                        </>
-                    )}
-                    <button className="btn btn-secondary h-8 px-3">
-                        <Save size={14} />
+                    <button
+                        onClick={() => setShowLogs(!showLogs)}
+                        className={`p-2 rounded-lg transition-colors ${showLogs ? 'bg-blue-500/20 text-blue-400' : 'text-[#888] hover:text-white hover:bg-[#252525]'}`}
+                        title="Logs"
+                    >
+                        <FileJson size={16} />
                     </button>
-                    <button className="btn btn-primary h-8 px-4">
-                        Share
+
+                    {isRunning ? (
+                        <button
+                            onClick={handleStop}
+                            className="h-8 px-4 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium flex items-center gap-2 transition-colors"
+                        >
+                            <Square size={12} fill="currentColor" />
+                            <span>Stop</span>
+                        </button>
+                    ) : (
+                        <button
+                            onClick={handleRunGraph}
+                            disabled={nodes.length === 0}
+                            className="h-8 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium flex items-center gap-2 transition-colors"
+                        >
+                            <Play size={12} fill="currentColor" />
+                            <span>Run</span>
+                        </button>
+                    )}
+
+                    <div className="w-px h-6 bg-[#252525]" />
+
+                    <button className="p-2 rounded-lg text-[#888] hover:text-white hover:bg-[#252525] transition-colors">
+                        <Save size={16} />
+                    </button>
+                    <button className="p-2 rounded-lg text-[#888] hover:text-white hover:bg-[#252525] transition-colors">
+                        <Share2 size={16} />
+                    </button>
+                    <button className="p-2 rounded-lg text-[#888] hover:text-white hover:bg-[#252525] transition-colors">
+                        <Settings size={16} />
                     </button>
                 </div>
-            </div>
+            </header>
 
-            {/* Main Workspace Area */}
-            <div className="flex-1 overflow-hidden relative">
-                {mode === 'graph' && (
-                    <div className="absolute inset-0 flex">
-                        <div className="flex-1 relative">
-                            <SkillGraphCanvas />
-                        </div>
-                        {showLogs && (
-                            <div className="w-[320px] bg-panel border-l border-subtle flex flex-col z-20 shadow-xl">
-                                <div className="flex items-center justify-between px-4 py-3 border-b border-subtle">
-                                    <h3 className="heading-sm">Logs</h3>
-                                    <button onClick={() => setLogs([])} className="text-xs text-tertiary hover:text-secondary">Clear</button>
-                                </div>
-                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                                    {logs.map((log, i) => (
-                                        <div key={i} className="p-2 rounded bg-bg-hover text-xs font-mono">
-                                            <div className="flex justify-between text-tertiary mb-1">
-                                                <span>{log.nodeId}</span>
-                                                <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
-                                            </div>
-                                            <div className="text-secondary">{log.message}</div>
-                                        </div>
-                                    ))}
-                                </div>
+            {/* Full-screen Canvas */}
+            <main className="flex-1 relative overflow-hidden">
+                <div className="absolute inset-0">
+                    <SkillGraphCanvas />
+                </div>
+
+                {/* Floating Logs Panel */}
+                {showLogs && (
+                    <div className="absolute right-4 top-4 bottom-4 w-80 bg-[#141414]/95 backdrop-blur-xl border border-[#252525] rounded-xl shadow-2xl flex flex-col overflow-hidden z-40">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-[#252525]">
+                            <h3 className="text-sm font-medium text-white">Execution Logs</h3>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setLogs([])}
+                                    className="text-xs text-[#666] hover:text-white transition-colors"
+                                >
+                                    Clear
+                                </button>
+                                <button
+                                    onClick={() => setShowLogs(false)}
+                                    className="text-[#666] hover:text-white transition-colors"
+                                >
+                                    ×
+                                </button>
                             </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Other modes rendered inside scrollable container */}
-                {mode !== 'graph' && (
-                    <div className="absolute inset-0 overflow-y-auto bg-app">
-                        <div className="min-h-full">
-                            {mode === 'inspiration' && <div className="p-6"><InspirationPage /></div>}
-                            {mode === 'gallery' && <div className="p-6"><GalleryPage /></div>}
-                            {mode === 'canvas' && <div className="h-full"><ComposeCanvas availableElements={[]} /></div>}
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                            {logs.length === 0 ? (
+                                <div className="text-center text-[#555] text-xs py-8">
+                                    No logs yet. Run the graph to see execution logs.
+                                </div>
+                            ) : (
+                                logs.map((log, i) => (
+                                    <div key={i} className="p-3 rounded-lg bg-[#1a1a1a] border border-[#252525]">
+                                        <div className="flex justify-between text-[10px] text-[#666] mb-1.5">
+                                            <span className="text-blue-400 font-medium">{log.nodeId}</span>
+                                            <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
+                                        </div>
+                                        <div className="text-xs text-[#aaa] font-mono">{log.message}</div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
                 )}
-            </div>
+            </main>
         </div>
-    );
-}
-
-function ModeTab({ active, onClick, icon: Icon, label }: { active: boolean, onClick: () => void, icon: any, label: string }) {
-    return (
-        <button
-            onClick={onClick}
-            className={`
-                flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all
-                ${active
-                    ? 'bg-white dark:bg-[#333] text-primary shadow-sm'
-                    : 'text-tertiary hover:text-secondary hover:bg-black/5 dark:hover:bg-white/5'}
-            `}
-        >
-            <Icon size={14} />
-            <span>{label}</span>
-        </button>
     );
 }
