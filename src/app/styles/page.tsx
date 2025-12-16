@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Palette, Upload, X, Trash2, Edit2, Check, ChevronRight } from 'lucide-react';
+import { Plus, Palette, Upload, X, Trash2, Edit2, ChevronRight, Search, Sparkles } from 'lucide-react';
 import type { StyleProfile } from '@/types';
 
 export default function StylesPage() {
@@ -9,6 +9,7 @@ export default function StylesPage() {
     const [loading, setLoading] = useState(true);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [selectedStyle, setSelectedStyle] = useState<StyleProfile | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
         fetchStyles();
@@ -50,52 +51,118 @@ export default function StylesPage() {
         }
     }
 
+    async function handleDeleteStyle(id: string) {
+        if (!confirm('Are you sure you want to delete this style profile?')) return;
+
+        try {
+            await fetch(`/api/styles/${id}`, { method: 'DELETE' });
+            setStyles(styles.filter(s => s.id !== id));
+            if (selectedStyle?.id === id) {
+                setSelectedStyle(null);
+            }
+        } catch (error) {
+            console.error('Failed to delete style:', error);
+        }
+    }
+
+    const filteredStyles = styles.filter(s =>
+        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.summary_s?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     return (
         <>
-            <div className="flex justify-between items-center mb-8">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
                 <div>
-                    <h1 className="heading-xl mb-1">Style Profiles</h1>
-                    <p className="text-secondary">Define your visual aesthetics and constraints</p>
+                    <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-1">Styles</h1>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                        {styles.length} profile{styles.length !== 1 ? 's' : ''} defined
+                    </p>
                 </div>
-                <button
-                    className="btn btn-primary h-10 px-4"
-                    onClick={() => setShowCreateDialog(true)}
-                >
-                    <Plus size={18} />
-                    <span>Create Profile</span>
-                </button>
+
+                <div className="flex items-center gap-3">
+                    <div className="relative">
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+                        <input
+                            type="text"
+                            placeholder="Search styles..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="
+                w-64 h-9 pl-9 pr-4 rounded-lg
+                bg-[var(--bg-input)] border border-[var(--border-subtle)]
+                text-sm text-[var(--text-primary)]
+                placeholder:text-[var(--text-tertiary)]
+                focus:outline-none focus:border-[var(--accent-primary)]
+                transition-colors
+              "
+                        />
+                    </div>
+                    <button
+                        className="
+              h-9 px-4 rounded-lg
+              bg-[var(--accent-primary)] text-white text-sm font-medium
+              hover:bg-[var(--accent-hover)]
+              flex items-center gap-2
+              transition-colors
+            "
+                        onClick={() => setShowCreateDialog(true)}
+                    >
+                        <Plus size={16} />
+                        <span>Create</span>
+                    </button>
+                </div>
             </div>
 
-            <div className="flex gap-6">
-                {/* Styles List */}
+            <div className="flex gap-5 min-h-[calc(100vh-200px)]">
+                {/* Styles Grid */}
                 <div className="flex-1">
                     {loading ? (
-                        <div className="flex items-center justify-center py-20">
-                            <div className="w-8 h-8 border-2 border-border-default border-t-accent-primary rounded-full animate-spin" />
+                        <div className="flex items-center justify-center py-24">
+                            <div className="w-8 h-8 border-2 border-[var(--border-default)] border-t-[var(--accent-primary)] rounded-full animate-spin" />
                         </div>
-                    ) : styles.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-subtle rounded-xl bg-card/50">
-                            <div className="w-16 h-16 rounded-2xl bg-bg-hover flex items-center justify-center text-tertiary mb-4">
-                                <Palette size={32} />
+                    ) : filteredStyles.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-[var(--border-subtle)] rounded-2xl bg-[var(--bg-card)]/30">
+                            <div className="w-16 h-16 rounded-2xl bg-[var(--bg-hover)] flex items-center justify-center text-[var(--text-tertiary)] mb-4">
+                                <Palette size={28} />
                             </div>
-                            <h3 className="heading-md mb-2">No style profiles</h3>
-                            <p className="text-secondary max-w-sm mb-6">
-                                Upload reference images to create your first style profile.
+                            <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
+                                {searchQuery ? 'No matching styles' : 'No style profiles'}
+                            </h3>
+                            <p className="text-sm text-[var(--text-secondary)] max-w-sm mb-6">
+                                {searchQuery ? 'Try a different search' : 'Upload reference images to create your first style profile'}
                             </p>
-                            <button className="btn btn-primary" onClick={() => setShowCreateDialog(true)}>
-                                Create Profile
-                            </button>
+                            {!searchQuery && (
+                                <button
+                                    className="
+                    h-10 px-5 rounded-lg
+                    bg-[var(--accent-primary)] text-white text-sm font-medium
+                    hover:bg-[var(--accent-hover)]
+                    transition-colors
+                  "
+                                    onClick={() => setShowCreateDialog(true)}
+                                >
+                                    Create Profile
+                                </button>
+                            )}
                         </div>
                     ) : (
-                        <div className="grid-responsive">
-                            {styles.map((style) => (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {filteredStyles.map((style) => (
                                 <div
                                     key={style.id}
-                                    className={`card cursor-pointer group ${selectedStyle?.id === style.id ? 'ring-2 ring-accent-primary' : ''}`}
+                                    className={`
+                    group cursor-pointer rounded-xl overflow-hidden
+                    bg-[var(--bg-card)] border transition-all duration-200
+                    ${selectedStyle?.id === style.id
+                                            ? 'border-[var(--accent-primary)] ring-2 ring-[var(--accent-subtle)]'
+                                            : 'border-[var(--border-subtle)] hover:border-[var(--border-default)] hover:shadow-md'}
+                  `}
                                     onClick={() => setSelectedStyle(style)}
                                 >
                                     {/* Palette Preview */}
-                                    <div className="h-24 rounded-lg mb-4 overflow-hidden bg-bg-hover flex items-center justify-center">
+                                    <div className="h-20 overflow-hidden relative">
                                         {style.palette_hint && style.palette_hint.length > 0 ? (
                                             <div className="flex w-full h-full">
                                                 {style.palette_hint.slice(0, 5).map((color, i) => (
@@ -107,24 +174,36 @@ export default function StylesPage() {
                                                 ))}
                                             </div>
                                         ) : (
-                                            <Palette size={32} className="text-tertiary opacity-50" />
+                                            <div className="w-full h-full bg-gradient-to-br from-violet-500/30 to-pink-500/30 flex items-center justify-center">
+                                                <Palette size={24} className="text-[var(--text-tertiary)] opacity-50" />
+                                            </div>
                                         )}
+
+                                        {/* Version badge */}
+                                        <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/40 text-white text-[10px] font-mono backdrop-blur-sm">
+                                            v{style.version}
+                                        </div>
                                     </div>
 
-                                    <div className="flex items-start justify-between gap-2 mb-2">
-                                        <h3 className="heading-sm group-hover:text-blue-500 transition-colors">
-                                            {style.name}
-                                        </h3>
-                                        <span className="badge badge-blue shrink-0">v{style.version}</span>
-                                    </div>
+                                    {/* Content */}
+                                    <div className="p-4">
+                                        <div className="flex items-start justify-between gap-2 mb-2">
+                                            <h3 className="text-sm font-semibold text-[var(--text-primary)] truncate group-hover:text-[var(--accent-primary)] transition-colors">
+                                                {style.name}
+                                            </h3>
+                                            <ChevronRight size={16} className="text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
+                                        </div>
 
-                                    <p className="text-sm text-secondary line-clamp-2 mb-3">
-                                        {style.summary_s}
-                                    </p>
+                                        <p className="text-xs text-[var(--text-secondary)] line-clamp-2 mb-3">
+                                            {style.summary_s}
+                                        </p>
 
-                                    <div className="flex items-center justify-between text-xs text-tertiary border-t border-subtle pt-3">
-                                        <span>{style.images.length} references</span>
-                                        <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        <div className="flex items-center justify-between text-[11px] text-[var(--text-tertiary)]">
+                                            <span>{style.images.length} references</span>
+                                            {style.banned_tokens && style.banned_tokens.length > 0 && (
+                                                <span className="text-red-400">{style.banned_tokens.length} banned</span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -134,61 +213,94 @@ export default function StylesPage() {
 
                 {/* Detail Panel */}
                 {selectedStyle && (
-                    <div className="w-[360px] bg-panel border border-subtle rounded-xl p-6 h-fit sticky top-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="heading-md">{selectedStyle.name}</h2>
-                            <button onClick={() => setSelectedStyle(null)} className="text-tertiary hover:text-primary">
-                                <X size={18} />
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div>
-                                <label className="text-xs font-medium text-tertiary uppercase">Summary</label>
-                                <p className="text-sm text-secondary mt-1">{selectedStyle.summary_s}</p>
-                            </div>
-
-                            {selectedStyle.banned_tokens && selectedStyle.banned_tokens.length > 0 && (
-                                <div>
-                                    <label className="text-xs font-medium text-tertiary uppercase">Banned Tokens</label>
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                        {selectedStyle.banned_tokens.map((token, i) => (
-                                            <span key={i} className="text-xs px-2 py-1 rounded bg-red-500/10 text-red-400">
-                                                {token}
-                                            </span>
+                    <div className="w-[300px] shrink-0">
+                        <div className="sticky top-0 bg-[var(--bg-panel)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+                            {/* Header with palette */}
+                            <div className="h-16 relative">
+                                {selectedStyle.palette_hint && selectedStyle.palette_hint.length > 0 ? (
+                                    <div className="flex w-full h-full">
+                                        {selectedStyle.palette_hint.slice(0, 5).map((color, i) => (
+                                            <div key={i} className="flex-1 h-full" style={{ backgroundColor: color }} />
                                         ))}
                                     </div>
-                                </div>
-                            )}
+                                ) : (
+                                    <div className="w-full h-full bg-gradient-to-br from-violet-500/30 to-pink-500/30" />
+                                )}
+                                <button
+                                    onClick={() => setSelectedStyle(null)}
+                                    className="absolute top-2 right-2 p-1 rounded bg-black/40 text-white hover:bg-black/60 transition-colors"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
 
-                            <div>
-                                <label className="text-xs font-medium text-tertiary uppercase">References</label>
-                                <div className="grid grid-cols-3 gap-2 mt-2">
-                                    {selectedStyle.images.slice(0, 6).map((img, i) => (
-                                        <div key={i} className="aspect-square rounded-lg bg-bg-hover overflow-hidden">
-                                            <div className="w-full h-full flex items-center justify-center text-tertiary text-xs">
-                                                {i + 1}
+                            <div className="p-4">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <h2 className="text-lg font-semibold text-[var(--text-primary)]">{selectedStyle.name}</h2>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-hover)] text-[var(--text-tertiary)] font-mono">
+                                        v{selectedStyle.version}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-[var(--text-secondary)] mb-4">{selectedStyle.summary_s}</p>
+
+                                {/* Banned Tokens */}
+                                {selectedStyle.banned_tokens && selectedStyle.banned_tokens.length > 0 && (
+                                    <div className="mb-4">
+                                        <label className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">Banned Tokens</label>
+                                        <div className="flex flex-wrap gap-1 mt-2">
+                                            {selectedStyle.banned_tokens.map((token, i) => (
+                                                <span key={i} className="text-[10px] px-2 py-1 rounded bg-red-500/10 text-red-400">
+                                                    {token}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* References */}
+                                <div className="mb-4">
+                                    <label className="text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">References ({selectedStyle.images.length})</label>
+                                    <div className="grid grid-cols-3 gap-2 mt-2">
+                                        {selectedStyle.images.slice(0, 6).map((img, i) => (
+                                            <div key={i} className="aspect-square rounded-lg bg-[var(--bg-hover)] overflow-hidden flex items-center justify-center">
+                                                <span className="text-xs text-[var(--text-tertiary)]">{i + 1}</span>
                                             </div>
-                                        </div>
-                                    ))}
-                                    {selectedStyle.images.length > 6 && (
-                                        <div className="aspect-square rounded-lg bg-bg-hover flex items-center justify-center text-tertiary text-xs">
-                                            +{selectedStyle.images.length - 6}
-                                        </div>
-                                    )}
+                                        ))}
+                                        {selectedStyle.images.length > 6 && (
+                                            <div className="aspect-square rounded-lg bg-[var(--bg-hover)] flex items-center justify-center">
+                                                <span className="text-xs text-[var(--text-tertiary)]">+{selectedStyle.images.length - 6}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="pt-4 mt-4 border-t border-subtle space-y-2">
-                            <button className="btn btn-secondary w-full justify-center">
-                                <Edit2 size={14} />
-                                <span>Edit Profile</span>
-                            </button>
-                            <button className="btn btn-ghost w-full justify-center text-red-500 hover:bg-red-500/10">
-                                <Trash2 size={14} />
-                                <span>Delete</span>
-                            </button>
+                            {/* Actions */}
+                            <div className="p-4 pt-0 space-y-2">
+                                <button className="
+                  w-full h-9 rounded-lg text-sm font-medium
+                  bg-[var(--bg-input)] border border-[var(--border-default)]
+                  text-[var(--text-primary)]
+                  hover:bg-[var(--bg-hover)]
+                  flex items-center justify-center gap-2
+                  transition-colors
+                ">
+                                    <Edit2 size={14} />
+                                    Edit Profile
+                                </button>
+                                <button
+                                    onClick={() => handleDeleteStyle(selectedStyle.id)}
+                                    className="
+                    w-full h-9 rounded-lg text-sm font-medium
+                    text-red-500 hover:bg-red-500/10
+                    flex items-center justify-center gap-2
+                    transition-colors
+                  "
+                                >
+                                    <Trash2 size={14} />
+                                    Delete
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -220,7 +332,6 @@ function CreateStyleDialog({
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
         if (files) {
-            // For now, just store file names as paths (real implementation would upload)
             const newImages = Array.from(files).map(f => `/assets/styles/${f.name}`);
             setImages([...images, ...newImages]);
         }
@@ -233,26 +344,52 @@ function CreateStyleDialog({
     };
 
     return (
-        <div className="dialog-overlay" onClick={onClose}>
-            <div className="dialog-panel max-w-lg" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <h2 className="heading-lg">Create Style Profile</h2>
-                        <p className="text-sm text-secondary">Upload reference images to define your style</p>
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div
+                className="
+          w-full max-w-lg mx-4
+          bg-[var(--bg-panel)] border border-[var(--border-subtle)]
+          rounded-2xl shadow-2xl
+        "
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center">
+                            <Sparkles size={20} className="text-white" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Create Style Profile</h2>
+                            <p className="text-xs text-[var(--text-tertiary)]">Define your visual aesthetic</p>
+                        </div>
                     </div>
-                    <button onClick={onClose} className="text-tertiary hover:text-primary">
-                        <X size={20} />
+                    <button
+                        onClick={onClose}
+                        className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                    >
+                        <X size={18} />
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Form */}
+                <form onSubmit={handleSubmit} className="p-5 space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-secondary mb-1.5">
+                        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
                             Profile Name
                         </label>
                         <input
                             type="text"
-                            className="input h-10"
+                            className="
+                w-full h-11 px-4 rounded-lg
+                bg-[var(--bg-input)] border border-[var(--border-default)]
+                text-[var(--text-primary)] text-sm
+                placeholder:text-[var(--text-tertiary)]
+                focus:outline-none focus:border-[var(--accent-primary)] focus:ring-2 focus:ring-[var(--accent-subtle)]
+              "
                             placeholder="e.g. Minimalist Tech"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
@@ -262,16 +399,19 @@ function CreateStyleDialog({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-secondary mb-1.5">
+                        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
                             Reference Images
                         </label>
                         <div
-                            className="border-2 border-dashed border-subtle rounded-xl p-8 text-center cursor-pointer hover:border-accent-primary hover:bg-accent-subtle/50 transition-colors"
+                            className="
+                border-2 border-dashed border-[var(--border-subtle)] rounded-xl p-6 text-center cursor-pointer
+                hover:border-[var(--accent-primary)] hover:bg-[var(--accent-subtle)]/30 transition-colors
+              "
                             onClick={() => fileInputRef.current?.click()}
                         >
-                            <Upload size={32} className="mx-auto text-tertiary mb-2" />
-                            <p className="text-sm text-secondary">Click to upload or drag images here</p>
-                            <p className="text-xs text-tertiary mt-1">PNG, JPG up to 10MB each</p>
+                            <Upload size={28} className="mx-auto text-[var(--text-tertiary)] mb-2" />
+                            <p className="text-sm text-[var(--text-secondary)]">Click to upload</p>
+                            <p className="text-[11px] text-[var(--text-tertiary)] mt-1">PNG, JPG up to 10MB</p>
                         </div>
                         <input
                             ref={fileInputRef}
@@ -282,14 +422,14 @@ function CreateStyleDialog({
                             onChange={handleFileSelect}
                         />
                         {images.length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-2">
+                            <div className="mt-2 flex flex-wrap gap-1">
                                 {images.map((img, i) => (
-                                    <span key={i} className="text-xs px-2 py-1 rounded bg-bg-hover text-secondary">
+                                    <span key={i} className="text-[11px] px-2 py-1 rounded bg-[var(--bg-hover)] text-[var(--text-secondary)] flex items-center gap-1">
                                         {img.split('/').pop()}
                                         <button
                                             type="button"
                                             onClick={() => setImages(images.filter((_, j) => j !== i))}
-                                            className="ml-1 text-tertiary hover:text-red-400"
+                                            className="text-[var(--text-tertiary)] hover:text-red-400"
                                         >
                                             ×
                                         </button>
@@ -300,23 +440,49 @@ function CreateStyleDialog({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-secondary mb-1.5">
-                            Style Tags <span className="text-tertiary font-normal">(comma-separated)</span>
+                        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+                            Banned Tokens <span className="text-[var(--text-tertiary)] font-normal">(comma-separated)</span>
                         </label>
                         <input
                             type="text"
-                            className="input h-10"
-                            placeholder="e.g. modern, clean, corporate"
+                            className="
+                w-full h-11 px-4 rounded-lg
+                bg-[var(--bg-input)] border border-[var(--border-default)]
+                text-[var(--text-primary)] text-sm
+                placeholder:text-[var(--text-tertiary)]
+                focus:outline-none focus:border-[var(--accent-primary)] focus:ring-2 focus:ring-[var(--accent-subtle)]
+              "
+                            placeholder="e.g. blurry, low quality, watermark"
                             value={tags}
                             onChange={(e) => setTags(e.target.value)}
                         />
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-4">
-                        <button type="button" className="btn btn-secondary" onClick={onClose}>
+                    {/* Actions */}
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="
+                px-4 h-10 rounded-lg text-sm font-medium
+                text-[var(--text-secondary)]
+                hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]
+                transition-colors
+              "
+                        >
                             Cancel
                         </button>
-                        <button type="submit" className="btn btn-primary" disabled={!name.trim()}>
+                        <button
+                            type="submit"
+                            disabled={!name.trim()}
+                            className="
+                px-5 h-10 rounded-lg text-sm font-medium
+                bg-[var(--accent-primary)] text-white
+                hover:bg-[var(--accent-hover)]
+                disabled:opacity-50 disabled:cursor-not-allowed
+                transition-colors
+              "
+                        >
                             Create Profile
                         </button>
                     </div>
