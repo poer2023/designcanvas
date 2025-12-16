@@ -10,7 +10,6 @@ import {
     Album,
     Zap,
     Settings,
-    PenTool,
     PanelLeftClose,
     PanelLeft
 } from 'lucide-react';
@@ -23,7 +22,6 @@ const navItems = [
         section: 'Workspace',
         items: [
             { name: 'Projects', href: '/', icon: LayoutGrid },
-            { name: 'Canvas', href: '/canvas', icon: PenTool },
         ],
     },
     {

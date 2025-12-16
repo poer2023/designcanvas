@@ -14,7 +14,7 @@ import { executeGraph, ExecutionLog } from '@/lib/engine/executor';
 // Lazy load heavy components
 const SkillGraphCanvas = dynamic(() => import('@/components/graph/SkillGraphCanvas'), { ssr: false });
 const GalleryPage = dynamic(() => import('@/app/gallery/page'), { ssr: false });
-const CanvasPage = dynamic(() => import('@/app/canvas/page'), { ssr: false });
+const ComposeCanvas = dynamic(() => import('@/components/compose/ComposeCanvas'), { ssr: false });
 const InspirationPage = dynamic(() => import('@/app/inspiration/page'), { ssr: false });
 
 type EditorMode = 'graph' | 'inspiration' | 'gallery' | 'canvas';
@@ -200,7 +200,7 @@ export default function ProjectPage() {
                         <div className="min-h-full">
                             {mode === 'inspiration' && <div className="p-6"><InspirationPage /></div>}
                             {mode === 'gallery' && <div className="p-6"><GalleryPage /></div>}
-                            {mode === 'canvas' && <div className="h-full"><CanvasPage /></div>}
+                            {mode === 'canvas' && <div className="h-full"><ComposeCanvas availableElements={[]} /></div>}
                         </div>
                     </div>
                 )}
