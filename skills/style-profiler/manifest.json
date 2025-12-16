@@ -1,0 +1,72 @@
+{
+    "name": "style-profiler",
+    "version": "1.0.0",
+    "description": "Analyze portfolio images to generate a style profile with summaries, constraints, and palette hints.",
+    "tags": [
+        "style",
+        "analysis",
+        "portfolio"
+    ],
+    "icon": "✨",
+    "color": "#8B5CF6",
+    "io_schema": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "portfolioPath": {
+                    "type": "string",
+                    "description": "Path to portfolio images folder"
+                },
+                "tags": {
+                    "type": "string",
+                    "description": "Comma-separated style tags"
+                },
+                "bannedTokens": {
+                    "type": "string",
+                    "description": "Comma-separated tokens to avoid"
+                }
+            },
+            "required": [
+                "portfolioPath"
+            ]
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "style_id": {
+                    "type": "string"
+                },
+                "summary_s": {
+                    "type": "string"
+                },
+                "summary_m": {
+                    "type": "string"
+                },
+                "summary_l": {
+                    "type": "string"
+                },
+                "banned_tokens": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "palette_hint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "constraints": {
+                    "type": "object"
+                }
+            }
+        }
+    },
+    "runtime_policy": {
+        "default_summary_level": "S",
+        "upgrade_conditions": [
+            "consecutive_failure > 2"
+        ]
+    }
+}

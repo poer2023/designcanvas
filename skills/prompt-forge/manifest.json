@@ -1,0 +1,75 @@
+{
+    "name": "prompt-forge",
+    "version": "1.0.0",
+    "description": "Generate optimized prompts for image generation based on brief, style, and references.",
+    "tags": [
+        "prompt",
+        "generation",
+        "ai"
+    ],
+    "icon": "🔧",
+    "color": "#F59E0B",
+    "io_schema": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "brief_id": {
+                    "type": "string"
+                },
+                "style_id": {
+                    "type": "string"
+                },
+                "refset_id": {
+                    "type": "string"
+                },
+                "layoutStrategy": {
+                    "type": "string",
+                    "enum": [
+                        "centered",
+                        "asymmetric",
+                        "grid",
+                        "freeform"
+                    ]
+                },
+                "strength": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "diversity": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                }
+            },
+            "required": [
+                "brief_id"
+            ]
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "prompts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {
+                                "type": "string"
+                            },
+                            "seed": {
+                                "type": "number"
+                            },
+                            "weight": {
+                                "type": "number"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "runtime_policy": {
+        "default_summary_level": "S"
+    }
+}

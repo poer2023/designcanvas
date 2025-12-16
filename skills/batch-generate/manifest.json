@@ -1,0 +1,70 @@
+{
+    "name": "batch-generate",
+    "version": "1.0.0",
+    "description": "Generate multiple poster candidates using prompts and AI image generation.",
+    "tags": [
+        "generation",
+        "batch",
+        "ai"
+    ],
+    "icon": "🎨",
+    "color": "#EF4444",
+    "io_schema": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "prompts": {
+                    "type": "array"
+                },
+                "count": {
+                    "type": "number",
+                    "enum": [
+                        4,
+                        8,
+                        12,
+                        24
+                    ]
+                },
+                "size": {
+                    "type": "object"
+                },
+                "quality": {
+                    "type": "string",
+                    "enum": [
+                        "draft",
+                        "standard",
+                        "high"
+                    ]
+                }
+            },
+            "required": [
+                "prompts"
+            ]
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "posters": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "poster_id": {
+                                "type": "string"
+                            },
+                            "image_url": {
+                                "type": "string"
+                            },
+                            "seed": {
+                                "type": "number"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "runtime_policy": {
+        "default_summary_level": "S"
+    }
+}

@@ -1,0 +1,85 @@
+{
+    "name": "brief",
+    "version": "1.0.0",
+    "description": "Create a structured poster brief with size, text, colors, and layout constraints.",
+    "tags": [
+        "brief",
+        "config",
+        "poster"
+    ],
+    "icon": "📋",
+    "color": "#3B82F6",
+    "io_schema": {
+        "input": {
+            "type": "object",
+            "properties": {
+                "width": {
+                    "type": "number",
+                    "description": "Poster width in pixels"
+                },
+                "height": {
+                    "type": "number",
+                    "description": "Poster height in pixels"
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Main title text"
+                },
+                "subtitle": {
+                    "type": "string",
+                    "description": "Subtitle text"
+                },
+                "tone": {
+                    "type": "string",
+                    "enum": [
+                        "energetic",
+                        "elegant",
+                        "playful",
+                        "professional",
+                        "minimalist"
+                    ]
+                },
+                "brandColors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "bannedColors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "required": [
+                "width",
+                "height",
+                "title"
+            ]
+        },
+        "output": {
+            "type": "object",
+            "properties": {
+                "brief_id": {
+                    "type": "string"
+                },
+                "size": {
+                    "type": "object"
+                },
+                "text_blocks": {
+                    "type": "array"
+                },
+                "palette": {
+                    "type": "object"
+                },
+                "layout_strategy": {
+                    "type": "string"
+                }
+            }
+        }
+    },
+    "runtime_policy": {
+        "default_summary_level": "S"
+    }
+}
