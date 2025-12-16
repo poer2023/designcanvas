@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Upload, Trash2, Grid, Image as ImageIcon, Folder, Check, X, Loader2 } from 'lucide-react';
+import { Plus, Upload, Trash2, Grid3X3, Image as ImageIcon, Folder, Check, X, Loader2, Search, Sparkles } from 'lucide-react';
 import type { RefSet, RefSetItem } from '@/types/refset';
 
 export default function InspirationPage() {
@@ -12,6 +12,7 @@ export default function InspirationPage() {
     const [uploading, setUploading] = useState(false);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [dragActive, setDragActive] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
         fetchRefsets();
@@ -91,7 +92,6 @@ export default function InspirationPage() {
         );
 
         if (files.length === 0) return;
-
         await handleUploadFiles(files);
     }, [selectedRefset]);
 
@@ -100,8 +100,7 @@ export default function InspirationPage() {
 
         setUploading(true);
 
-        // Create mock items (in real implementation, would upload to server)
-        const newItems: Omit<RefSetItem, 'id' | 'refset_id' | 'created_at'>[] = files.map((file, index) => ({
+        const newItems: Omit<RefSetItem, 'id' | 'refset_id' | 'created_at'>[] = files.map((file) => ({
             image_path: `/assets/inspiration/${selectedRefset.id}/${file.name}`,
             thumbnail_path: `/assets/inspiration/${selectedRefset.id}/thumbs/${file.name}`,
             file_size: file.size,
@@ -116,9 +115,7 @@ export default function InspirationPage() {
             });
             const data = await response.json();
             if (data.success) {
-                // Refresh items
                 await fetchRefsetItems(selectedRefset.id);
-                // Update refset count
                 setRefsets(refsets.map(r =>
                     r.id === selectedRefset.id
                         ? { ...r, item_count: r.item_count + files.length }
@@ -139,60 +136,99 @@ export default function InspirationPage() {
         }
     };
 
+    const filteredRefsets = refsets.filter(r =>
+        r.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const totalImages = refsets.reduce((sum, r) => sum + r.item_count, 0);
+
     return (
         <>
-            <div className="flex justify-between items-center mb-8">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
                 <div>
-                    <h1 className="heading-xl mb-1">Inspiration Pool</h1>
-                    <p className="text-secondary">Import and organize reference images</p>
+                    <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-1">Inspiration</h1>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                        {refsets.length} set{refsets.length !== 1 ? 's' : ''} • {totalImages} image{totalImages !== 1 ? 's' : ''}
+                    </p>
                 </div>
                 <button
-                    className="btn btn-primary h-10 px-4"
+                    className="
+            h-9 px-4 rounded-lg
+            bg-[var(--accent-primary)] text-white text-sm font-medium
+            hover:bg-[var(--accent-hover)]
+            flex items-center gap-2
+            transition-colors
+          "
                     onClick={() => setShowCreateDialog(true)}
                 >
-                    <Plus size={18} />
-                    <span>New RefSet</span>
+                    <Plus size={16} />
+                    <span>New Set</span>
                 </button>
             </div>
 
-            <div className="flex gap-6 h-[calc(100vh-200px)]">
+            <div className="flex gap-5 min-h-[calc(100vh-200px)]">
                 {/* RefSets Sidebar */}
-                <div className="w-[260px] bg-panel border border-subtle rounded-xl p-4 overflow-y-auto shrink-0">
-                    <h3 className="heading-sm mb-3">Reference Sets</h3>
+                <div className="w-[240px] shrink-0">
+                    <div className="sticky top-0 bg-[var(--bg-panel)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+                        <div className="p-3 border-b border-[var(--border-subtle)]">
+                            <div className="relative">
+                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+                                <input
+                                    type="text"
+                                    placeholder="Search sets..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="
+                    w-full h-8 pl-8 pr-3 rounded-lg
+                    bg-[var(--bg-input)] border border-[var(--border-subtle)]
+                    text-xs text-[var(--text-primary)]
+                    placeholder:text-[var(--text-tertiary)]
+                    focus:outline-none focus:border-[var(--accent-primary)]
+                  "
+                                />
+                            </div>
+                        </div>
 
-                    {loading ? (
-                        <div className="flex items-center justify-center py-8">
-                            <Loader2 className="animate-spin text-tertiary" size={24} />
+                        <div className="p-2 max-h-[500px] overflow-y-auto">
+                            {loading ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="animate-spin text-[var(--text-tertiary)]" size={20} />
+                                </div>
+                            ) : filteredRefsets.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <Folder size={28} className="mx-auto mb-2 text-[var(--text-tertiary)] opacity-50" />
+                                    <p className="text-xs text-[var(--text-tertiary)]">
+                                        {searchQuery ? 'No matching sets' : 'No sets yet'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-1">
+                                    {filteredRefsets.map((refset) => (
+                                        <button
+                                            key={refset.id}
+                                            onClick={() => handleSelectRefset(refset)}
+                                            className={`
+                        w-full p-3 rounded-lg text-left transition-all
+                        ${selectedRefset?.id === refset.id
+                                                    ? 'bg-[var(--accent-subtle)] border border-[var(--accent-primary)]'
+                                                    : 'hover:bg-[var(--bg-hover)] border border-transparent'}
+                      `}
+                                        >
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <Grid3X3 size={14} className={selectedRefset?.id === refset.id ? 'text-[var(--accent-primary)]' : 'text-[var(--text-tertiary)]'} />
+                                                <span className="text-sm font-medium text-[var(--text-primary)] truncate">{refset.name}</span>
+                                            </div>
+                                            <div className="text-[11px] text-[var(--text-tertiary)]">
+                                                {refset.item_count} images
+                                                {refset.cluster_count > 0 && ` • ${refset.cluster_count} clusters`}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                    ) : refsets.length === 0 ? (
-                        <div className="text-center py-8 text-tertiary text-sm">
-                            <Folder size={32} className="mx-auto mb-2 opacity-50" />
-                            <p>No reference sets yet</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {refsets.map((refset) => (
-                                <button
-                                    key={refset.id}
-                                    onClick={() => handleSelectRefset(refset)}
-                                    className={`
-                    w-full p-3 rounded-lg text-left transition-colors
-                    ${selectedRefset?.id === refset.id
-                                            ? 'bg-accent-subtle border border-accent-primary'
-                                            : 'bg-card hover:bg-card-hover border border-transparent'}
-                  `}
-                                >
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <Grid size={14} className="text-tertiary" />
-                                        <span className="text-sm font-medium truncate">{refset.name}</span>
-                                    </div>
-                                    <div className="text-xs text-tertiary">
-                                        {refset.item_count} images • {refset.cluster_count} clusters
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                    </div>
                 </div>
 
                 {/* Main Content */}
@@ -206,10 +242,10 @@ export default function InspirationPage() {
                                 onDragOver={handleDrag}
                                 onDrop={handleDrop}
                                 className={`
-                  relative border-2 border-dashed rounded-xl p-8 mb-4 text-center transition-colors
+                  relative border-2 border-dashed rounded-xl p-6 mb-4 text-center transition-all
                   ${dragActive
-                                        ? 'border-accent-primary bg-accent-subtle'
-                                        : 'border-subtle hover:border-default'}
+                                        ? 'border-[var(--accent-primary)] bg-[var(--accent-subtle)]'
+                                        : 'border-[var(--border-subtle)] hover:border-[var(--border-default)]'}
                 `}
                             >
                                 <input
@@ -220,15 +256,15 @@ export default function InspirationPage() {
                                     className="absolute inset-0 opacity-0 cursor-pointer"
                                 />
                                 {uploading ? (
-                                    <div className="flex items-center justify-center gap-2">
-                                        <Loader2 className="animate-spin" size={20} />
-                                        <span>Uploading...</span>
+                                    <div className="flex items-center justify-center gap-2 text-[var(--text-secondary)]">
+                                        <Loader2 className="animate-spin" size={18} />
+                                        <span className="text-sm">Uploading...</span>
                                     </div>
                                 ) : (
                                     <>
-                                        <Upload size={32} className="mx-auto text-tertiary mb-2" />
-                                        <p className="text-secondary">Drop images here or click to upload</p>
-                                        <p className="text-xs text-tertiary mt-1">Supports JPG, PNG, WebP</p>
+                                        <Upload size={24} className="mx-auto text-[var(--text-tertiary)] mb-2" />
+                                        <p className="text-sm text-[var(--text-secondary)]">Drop images or click to upload</p>
+                                        <p className="text-[11px] text-[var(--text-tertiary)] mt-1">JPG, PNG, WebP</p>
                                     </>
                                 )}
                             </div>
@@ -236,46 +272,49 @@ export default function InspirationPage() {
                             {/* Image Grid */}
                             <div className="flex-1 overflow-y-auto">
                                 {items.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center h-full text-tertiary">
-                                        <ImageIcon size={48} className="opacity-50 mb-4" />
-                                        <p className="text-lg">No images yet</p>
-                                        <p className="text-sm">Upload images to get started</p>
+                                    <div className="flex flex-col items-center justify-center h-64 text-center border border-dashed border-[var(--border-subtle)] rounded-2xl bg-[var(--bg-card)]/30">
+                                        <div className="w-14 h-14 rounded-2xl bg-[var(--bg-hover)] flex items-center justify-center text-[var(--text-tertiary)] mb-3">
+                                            <ImageIcon size={24} />
+                                        </div>
+                                        <h3 className="text-sm font-medium text-[var(--text-primary)] mb-1">No images yet</h3>
+                                        <p className="text-xs text-[var(--text-secondary)]">Upload some reference images to get started</p>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-4 gap-4">
+                                    <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                                         {items.map((item) => (
                                             <div
                                                 key={item.id}
                                                 className={`
-                          relative aspect-square rounded-lg overflow-hidden border-2 group cursor-pointer
-                          ${item.is_duplicate ? 'border-amber-500/50 opacity-60' : 'border-transparent hover:border-accent-primary'}
+                          relative aspect-square rounded-xl overflow-hidden group cursor-pointer
+                          bg-[var(--bg-card)] border-2 transition-all
+                          ${item.is_duplicate
+                                                        ? 'border-amber-500/50 opacity-60'
+                                                        : 'border-transparent hover:border-[var(--accent-primary)]'}
                         `}
                                             >
-                                                <div className="absolute inset-0 bg-bg-hover flex items-center justify-center">
-                                                    <ImageIcon size={24} className="text-tertiary" />
+                                                <div className="absolute inset-0 bg-[var(--bg-hover)] flex items-center justify-center">
+                                                    <ImageIcon size={20} className="text-[var(--text-tertiary)]" />
                                                 </div>
 
-                                                {/* Overlay */}
-                                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                                    <button className="p-2 bg-white/20 rounded-lg hover:bg-white/30 text-white">
-                                                        <Check size={16} />
+                                                {/* Hover Overlay */}
+                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                                    <button className="p-2 bg-white/20 rounded-lg hover:bg-white/30 text-white transition-colors">
+                                                        <Check size={14} />
                                                     </button>
-                                                    <button className="p-2 bg-red-500/50 rounded-lg hover:bg-red-500/70 text-white">
-                                                        <Trash2 size={16} />
+                                                    <button className="p-2 bg-red-500/70 rounded-lg hover:bg-red-500 text-white transition-colors">
+                                                        <Trash2 size={14} />
                                                     </button>
                                                 </div>
 
-                                                {/* Duplicate badge */}
+                                                {/* Badges */}
                                                 {item.is_duplicate && (
-                                                    <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-amber-500 text-white text-[10px] font-medium">
-                                                        Duplicate
+                                                    <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-amber-500 text-white text-[9px] font-medium">
+                                                        Dup
                                                     </div>
                                                 )}
-
-                                                {/* Cluster badge */}
                                                 {item.cluster_id !== undefined && (
-                                                    <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded bg-blue-500 text-white text-[10px] font-medium">
-                                                        Cluster {item.cluster_id}
+                                                    <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded bg-blue-500/80 text-white text-[9px] font-medium backdrop-blur-sm">
+                                                        C{item.cluster_id}
                                                     </div>
                                                 )}
                                             </div>
@@ -285,16 +324,27 @@ export default function InspirationPage() {
                             </div>
                         </>
                     ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-tertiary">
-                            <Grid size={64} className="opacity-50 mb-4" />
-                            <p className="text-lg">Select a Reference Set</p>
-                            <p className="text-sm mb-4">Or create a new one to get started</p>
+                        <div className="flex-1 flex flex-col items-center justify-center text-center border border-dashed border-[var(--border-subtle)] rounded-2xl bg-[var(--bg-card)]/30">
+                            <div className="w-16 h-16 rounded-2xl bg-[var(--bg-hover)] flex items-center justify-center text-[var(--text-tertiary)] mb-4">
+                                <Sparkles size={28} />
+                            </div>
+                            <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">Select a Reference Set</h3>
+                            <p className="text-sm text-[var(--text-secondary)] max-w-xs mb-4">
+                                Choose a set from the sidebar or create a new one to start collecting inspiration
+                            </p>
                             <button
-                                className="btn btn-secondary"
+                                className="
+                  h-9 px-4 rounded-lg text-sm font-medium
+                  bg-[var(--bg-input)] border border-[var(--border-default)]
+                  text-[var(--text-primary)]
+                  hover:bg-[var(--bg-hover)]
+                  flex items-center gap-2
+                  transition-colors
+                "
                                 onClick={() => setShowCreateDialog(true)}
                             >
-                                <Plus size={16} />
-                                <span>Create RefSet</span>
+                                <Plus size={14} />
+                                Create Set
                             </button>
                         </div>
                     )}
@@ -329,22 +379,44 @@ function CreateRefsetDialog({
     };
 
     return (
-        <div className="dialog-overlay" onClick={onClose}>
-            <div className="dialog-panel max-w-md" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="heading-lg">Create Reference Set</h2>
-                    <button onClick={onClose} className="text-tertiary hover:text-primary">
-                        <X size={20} />
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div
+                className="
+          w-full max-w-md mx-4
+          bg-[var(--bg-panel)] border border-[var(--border-subtle)]
+          rounded-2xl shadow-2xl p-6
+        "
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-orange-400 flex items-center justify-center">
+                            <Sparkles size={20} className="text-white" />
+                        </div>
+                        <h2 className="text-lg font-semibold text-[var(--text-primary)]">New Reference Set</h2>
+                    </div>
+                    <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
+                        <X size={18} />
                     </button>
                 </div>
+
                 <form onSubmit={handleSubmit}>
-                    <div className="mb-4">
-                        <label className="block text-sm font-medium text-secondary mb-1.5">
+                    <div className="mb-5">
+                        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
                             Name
                         </label>
                         <input
                             type="text"
-                            className="input h-10"
+                            className="
+                w-full h-11 px-4 rounded-lg
+                bg-[var(--bg-input)] border border-[var(--border-default)]
+                text-[var(--text-primary)] text-sm
+                placeholder:text-[var(--text-tertiary)]
+                focus:outline-none focus:border-[var(--accent-primary)] focus:ring-2 focus:ring-[var(--accent-subtle)]
+              "
                             placeholder="e.g. Summer Festival References"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
@@ -352,10 +424,29 @@ function CreateRefsetDialog({
                         />
                     </div>
                     <div className="flex justify-end gap-3">
-                        <button type="button" className="btn btn-secondary" onClick={onClose}>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="
+                px-4 h-10 rounded-lg text-sm font-medium
+                text-[var(--text-secondary)]
+                hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]
+                transition-colors
+              "
+                        >
                             Cancel
                         </button>
-                        <button type="submit" className="btn btn-primary" disabled={!name.trim()}>
+                        <button
+                            type="submit"
+                            disabled={!name.trim()}
+                            className="
+                px-5 h-10 rounded-lg text-sm font-medium
+                bg-[var(--accent-primary)] text-white
+                hover:bg-[var(--accent-hover)]
+                disabled:opacity-50 disabled:cursor-not-allowed
+                transition-colors
+              "
+                        >
                             Create
                         </button>
                     </div>
