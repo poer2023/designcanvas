@@ -75,6 +75,11 @@ export default function SpacePage() {
                 e.preventDefault();
                 handleAddGroup('blank');
             }
+            // X - Scissors Mode (Cut Connections)
+            if (e.key === 'x' && !e.metaKey && !e.ctrlKey) {
+                e.preventDefault();
+                setInteractionMode('scissors');
+            }
         };
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
@@ -164,13 +169,10 @@ export default function SpacePage() {
                     </div>
                 </div>
 
-                {/* Center: Theme Toggle (minimal) */}
+                {/* Right: Theme + Undo/Redo + Export */}
                 <div className="flex items-center gap-1">
                     <ThemeToggle />
-                </div>
-
-                {/* Right: Export + Undo/Redo */}
-                <div className="flex items-center gap-1">
+                    <div className="w-px h-5 bg-[var(--border-subtle)] mx-1" />
                     <button
                         className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
                         title="Undo (⌘Z)"

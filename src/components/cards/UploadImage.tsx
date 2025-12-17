@@ -10,6 +10,7 @@ import {
     Unlock,
     X,
     Plus,
+    Sparkles,
 } from 'lucide-react';
 
 interface UploadImageData {
@@ -71,7 +72,7 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
     return (
         <div className="group/card relative">
             {/* Left Handle (Target) - Full height hit area, visual button centered */}
-            <div className="absolute -left-[14px] top-0 h-full w-6 z-10 group/handle flex items-center justify-center">
+            <div className="absolute -left-6 top-0 h-full w-6 z-10 group/handle flex items-center justify-center">
                 <Handle
                     type="target"
                     position={Position.Left}
@@ -82,15 +83,26 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
                 </div>
             </div>
 
-            {/* Right Handle (Source) - Small button only */}
+            {/* Right Handles (Source) - Dual outputs */}
+            {/* Image Out - for image data (top position) */}
             <Handle
                 type="source"
                 position={Position.Right}
                 id="imageOut"
-                className="!w-6 !h-6 !bg-white !border !border-gray-300 !rounded-full !shadow-md !-right-[14px] opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-gray-400 hover:!shadow-lg hover:!scale-110"
-                style={{ top: '50%', transform: 'translateY(-50%)' }}
+                className="!w-6 !h-6 !bg-white !border !border-blue-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-blue-400 hover:!shadow-lg hover:!scale-110"
+                style={{ top: '40%', transform: 'translateY(-50%)' }}
             >
-                <Plus size={14} className="text-gray-500 pointer-events-none" />
+                <ImageIcon size={10} className="text-blue-500 pointer-events-none" />
+            </Handle>
+            {/* Context Out - for caption and metadata (bottom position) */}
+            <Handle
+                type="source"
+                position={Position.Right}
+                id="contextOut"
+                className="!w-6 !h-6 !bg-white !border !border-purple-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-purple-400 hover:!shadow-lg hover:!scale-110"
+                style={{ top: '60%', transform: 'translateY(-50%)' }}
+            >
+                <Sparkles size={10} className="text-purple-500 pointer-events-none" />
             </Handle>
 
             <div

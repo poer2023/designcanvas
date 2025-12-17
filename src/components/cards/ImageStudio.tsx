@@ -84,6 +84,17 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
         }
     }, [prompt]);
 
+    // Calculate content height based on ratio with fixed width (480px - 48px padding = 432px)
+    const getContentDimensions = () => {
+        const [w, h] = ratio.split(':').map(Number);
+        const contentWidth = 432;
+        const aspectRatio = w / h;
+        const height = contentWidth / aspectRatio;
+        return { width: contentWidth, height };
+    };
+
+    const { height: contentHeight } = getContentDimensions();
+
     const handleRun = useCallback(async () => {
         if (!prompt.trim()) return;
         setStatus('running');
@@ -94,7 +105,7 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
 
         const mockResults: ImageResult[] = Array.from({ length: count }, (_, i) => ({
             id: `result-${Date.now()}-${i}`,
-            url: `https://picsum.photos/seed/${Date.now() + i}/400/600`,
+            url: `https://picsum.photos/seed/${Date.now() + i}/400/600`, // In real app, this would match ratio
             seed: Math.floor(Math.random() * 1000000),
         }));
 
@@ -106,7 +117,7 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
     return (
         <div className="group/card relative">
             {/* Left Handle (Target) - Full height hit area, visual button centered */}
-            <div className="absolute -left-[14px] top-0 h-full w-6 z-10 group/handle flex items-center justify-center">
+            <div className="absolute -left-6 top-0 h-full w-6 z-10 group/handle flex items-center justify-center">
                 <Handle
                     type="target"
                     position={Position.Left}
@@ -118,50 +129,65 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                 </div>
             </div>
 
-            {/* Right Handle (Source) - Small button only */}
+            {/* Right Handles (Source) - Dual outputs */}
+            {/* Image Out - for image data (top position) */}
             <Handle
                 type="source"
                 position={Position.Right}
                 id="imageOut"
-                className="!w-6 !h-6 !bg-white !border !border-gray-300 !rounded-full !shadow-md !-right-[14px] opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-gray-400 hover:!shadow-lg hover:!scale-110"
-                style={{ top: '50%', transform: 'translateY(-50%)' }}
+                className="!w-6 !h-6 !bg-white !border !border-blue-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-blue-400 hover:!shadow-lg hover:!scale-110"
+                style={{ top: '40%', transform: 'translateY(-50%)' }}
             >
-                <Plus size={14} className="text-gray-500 pointer-events-none" />
+                <ImageIcon size={10} className="text-blue-500 pointer-events-none" />
+            </Handle>
+            {/* Context Out - for prompt/params (bottom position) */}
+            <Handle
+                type="source"
+                position={Position.Right}
+                id="contextOut"
+                className="!w-6 !h-6 !bg-white !border !border-purple-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-purple-400 hover:!shadow-lg hover:!scale-110"
+                style={{ top: '60%', transform: 'translateY(-50%)' }}
+            >
+                <Sparkles size={10} className="text-purple-500 pointer-events-none" />
             </Handle>
 
             <div
                 className={`
-                    relative bg-white rounded-[32px] w-[600px] min-h-[400px]
+                    relative bg-white rounded-[32px] w-[480px]
                     flex flex-col
-                    transition-all duration-200
+                    transition-all duration-500 ease-in-out
                     ${selected ? 'ring-2 ring-gray-400 shadow-2xl' : 'shadow-lg border border-gray-200'}
                 `}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4">
+                <div className="flex items-center justify-between px-6 py-4 z-20">
                     <div className="flex items-center gap-2 text-gray-800">
                         <ImageIcon size={18} className="text-gray-600" />
                         <span className="font-semibold text-sm">Image Generator #1</span>
                     </div>
-                    {/* External Gallery Action */}
-                    <button className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors">
-                        <GalleryHorizontalEnd size={18} />
-                    </button>
                 </div>
 
-                {/* Main Content Area */}
-                <div className="flex-1 px-6 pb-24 relative min-h-[200px]">
-                    {results.length > 0 ? (
-                        <div className={`grid gap-4 ${results.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                            {results.map((res) => (
-                                <div key={res.id} className="relative group rounded-xl overflow-hidden aspect-[3/2] bg-gray-50">
-                                    <img src={res.url} alt="Generated" className="w-full h-full object-cover" />
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="h-full flex flex-col justify-end pb-8"></div>
-                    )}
+                {/* Main Content Area - Adaptive Height */}
+                <div
+                    className="px-6 pb-24 relative transition-all duration-500 ease-in-out"
+                    style={{ height: contentHeight + 96 }} // Add padding-bottom space (24px * 4 = 96px) roughly or just let it expand? 
+                // Actually user said "content bearing area" adapts.
+                // If we set explicit height here, flex-col parent will respect it.
+                >
+                    <div className="absolute inset-x-6 inset-y-0" style={{ height: contentHeight }}>
+                        {results.length > 0 ? (
+                            <div className={`grid gap-4 w-full h-full ${results.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                {results.map((res) => (
+                                    <div key={res.id} className="relative group rounded-xl overflow-hidden bg-gray-50 h-full w-full">
+                                        <img src={res.url} alt="Generated" className="w-full h-full object-cover" />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            // Empty state - minimal visual footprint, but preserving aspect ratio space
+                            <div className="w-full h-full" />
+                        )}
+                    </div>
                 </div>
 
                 {/* Bottom Controls Container */}
@@ -173,17 +199,17 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                         onChange={(e) => setPrompt(e.target.value)}
                         placeholder="描述你想要生成的图像......"
                         rows={1}
-                        className="w-full bg-transparent border-none focus:ring-0 text-gray-600 placeholder-gray-300 text-sm resize-none mb-4 py-0 pl-1"
+                        className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gray-600 placeholder-gray-300 text-sm resize-none mb-4 py-0 pl-1"
                         style={{ minHeight: '24px', maxHeight: '120px' }}
                     />
 
                     {/* Control Row */}
-                    <div className="flex items-center gap-2 relative z-20">
+                    <div className="flex items-center gap-1.5 relative z-20 overflow-x-auto no-scrollbar mask-gradient-r">
                         {/* Model Pill */}
-                        <div className="relative">
+                        <div className="relative shrink-0">
                             <button
                                 onClick={() => setShowDropdown(showDropdown === 'model' ? null : 'model')}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${showDropdown === 'model' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'
+                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${showDropdown === 'model' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'
                                     }`}
                             >
                                 {model}
@@ -205,10 +231,10 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                         </div>
 
                         {/* Ratio Pill */}
-                        <div className="relative">
+                        <div className="relative shrink-0">
                             <button
                                 onClick={() => setShowDropdown(showDropdown === 'ratio' ? null : 'ratio')}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${showDropdown === 'ratio' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'
+                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${showDropdown === 'ratio' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'
                                     }`}
                             >
                                 <span className="opacity-50">☐</span> {ratio}
@@ -230,10 +256,10 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                         </div>
 
                         {/* Resolution Pill */}
-                        <div className="relative">
+                        <div className="relative shrink-0">
                             <button
                                 onClick={() => setShowDropdown(showDropdown === 'resolution' ? null : 'resolution')}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${showDropdown === 'resolution' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'
+                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${showDropdown === 'resolution' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'
                                     }`}
                             >
                                 {resolution}
@@ -255,7 +281,7 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                         </div>
 
                         {/* Count Stepper Pill */}
-                        <div className="flex items-center bg-gray-200/50 rounded-full px-1 py-0.5">
+                        <div className="flex items-center bg-gray-200/50 rounded-full px-1 py-0.5 shrink-0">
                             <button
                                 onClick={() => setCount(Math.max(1, count - 1))}
                                 className="p-1 text-gray-500 hover:text-gray-700 rounded-full active:bg-gray-300/50 transition-colors"
@@ -271,10 +297,12 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                             </button>
                         </div>
 
+                        <div className="flex-1 min-w-0" />
+
                         {/* Settings Button */}
                         <button
                             onClick={() => setShowSettings(!showSettings)}
-                            className={`p-2 rounded-full transition-colors ml-auto ${showSettings ? 'bg-gray-200 text-gray-800' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200/50'}`}
+                            className={`p-2 rounded-full transition-colors shrink-0 ${showSettings ? 'bg-gray-200 text-gray-800' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200/50'}`}
                         >
                             <Settings size={16} />
                         </button>
@@ -284,7 +312,7 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                             onClick={handleRun}
                             disabled={!prompt || status === 'running'}
                             className={`
-                                w-8 h-8 rounded-full flex items-center justify-center transition-all
+                                w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0
                                 ${!prompt ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-black hover:scale-105 shadow-md active:scale-95'}
                             `}
                         >

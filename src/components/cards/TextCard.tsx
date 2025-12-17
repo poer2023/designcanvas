@@ -61,7 +61,7 @@ function TextCardComponent({ id, data, selected }: TextCardProps) {
     return (
         <div className="group/card relative">
             {/* Left Handle (Target) - Full height hit area, visual button centered */}
-            <div className="absolute -left-[14px] top-0 h-full w-6 z-10 group/handle flex items-center justify-center">
+            <div className="absolute -left-6 top-0 h-full w-6 z-10 group/handle flex items-center justify-center">
                 <Handle
                     type="target"
                     position={Position.Left}
@@ -77,7 +77,7 @@ function TextCardComponent({ id, data, selected }: TextCardProps) {
             <Handle
                 type="source"
                 position={Position.Right}
-                className="!w-6 !h-6 !bg-white !border !border-gray-300 !rounded-full !shadow-md !-right-[14px] opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-gray-400 hover:!shadow-lg hover:!scale-110"
+                className="!w-6 !h-6 !bg-white !border !border-gray-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-gray-400 hover:!shadow-lg hover:!scale-110"
                 style={{ top: '50%', transform: 'translateY(-50%)' }}
             >
                 <Plus size={14} className="text-gray-500 pointer-events-none" />

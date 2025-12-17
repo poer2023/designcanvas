@@ -10,6 +10,7 @@ import {
     EdgeChange
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
+import { getPortTypeForHandle, isPortCompatible, type PortType } from '@/types/skills';
 
 export type NodeStatus = 'idle' | 'running' | 'success' | 'fail';
 
@@ -56,6 +57,11 @@ interface GraphState {
 
     resetGraph: () => void;
     loadGraph: (nodes: SkillNode[], edges: SkillEdge[]) => void;
+
+    // Node membership for GroupFrame
+    updateNodeParent: (nodeId: string, parentId: string | null) => void;
+    detectNodeMembership: (nodeId: string) => string | null;
+    getNodesInGroup: (groupId: string) => SkillNode[];
 }
 
 // Skill type definitions for adding new nodes
@@ -130,9 +136,38 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     },
 
     onConnect: (connection) => {
+        const { nodes } = get();
+        const sourceNode = nodes.find(n => n.id === connection.source);
+        const targetNode = nodes.find(n => n.id === connection.target);
+
+        if (!sourceNode || !targetNode) return;
+
+        // Get port types
+        const sourceType = getPortTypeForHandle(
+            sourceNode.type || 'skillNode',
+            connection.sourceHandle || '',
+            'source'
+        );
+        const targetType = getPortTypeForHandle(
+            targetNode.type || 'skillNode',
+            connection.targetHandle || '',
+            'target'
+        );
+
+        // Validate port compatibility
+        if (!isPortCompatible(sourceType, targetType)) {
+            console.warn(`Port type mismatch: ${sourceType} -> ${targetType}`);
+            // Still allow connection but mark it
+        }
+
         set({
             edges: addEdge(
-                { ...connection, id: uuidv4(), animated: true },
+                {
+                    ...connection,
+                    id: uuidv4(),
+                    animated: true,
+                    data: { sourceType, targetType, valid: isPortCompatible(sourceType, targetType) }
+                },
                 get().edges
             ),
         });
@@ -252,4 +287,50 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     resetGraph: () => set({ nodes: [], edges: [], selectedNodeId: null }),
 
     loadGraph: (nodes, edges) => set({ nodes, edges }),
+
+    // Node membership detection for GroupFrame
+    updateNodeParent: (nodeId: string, parentId: string | null) => {
+        set({
+            nodes: get().nodes.map((node) =>
+                node.id === nodeId
+                    ? { ...node, parentId: parentId ?? undefined }
+                    : node
+            ),
+        });
+    },
+
+    detectNodeMembership: (nodeId: string) => {
+        const { nodes } = get();
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return null;
+
+        // Find GroupFrame nodes
+        const groupFrames = nodes.filter(n => n.type === 'groupFrame');
+
+        for (const group of groupFrames) {
+            // Check if node is within group bounds
+            const groupWidth = (group.measured?.width || group.width || 400) as number;
+            const groupHeight = (group.measured?.height || group.height || 300) as number;
+            const nodeWidth = (node.measured?.width || node.width || 200) as number;
+            const nodeHeight = (node.measured?.height || node.height || 100) as number;
+
+            const nodeCenterX = node.position.x + nodeWidth / 2;
+            const nodeCenterY = node.position.y + nodeHeight / 2;
+
+            if (
+                nodeCenterX >= group.position.x &&
+                nodeCenterX <= group.position.x + groupWidth &&
+                nodeCenterY >= group.position.y &&
+                nodeCenterY <= group.position.y + groupHeight
+            ) {
+                return group.id;
+            }
+        }
+        return null;
+    },
+
+    // Get all nodes in a group
+    getNodesInGroup: (groupId: string) => {
+        return get().nodes.filter(n => n.parentId === groupId);
+    },
 }));

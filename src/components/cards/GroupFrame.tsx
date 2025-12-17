@@ -107,7 +107,7 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
             />
 
             {/* Left Handle (Target) - Full height hit area, visual button centered */}
-            <div className="absolute -left-[14px] top-0 h-full w-6 z-10 group/handle flex items-center justify-center">
+            <div className="absolute -left-6 top-0 h-full w-6 z-10 group/handle flex items-center justify-center">
                 <Handle
                     type="target"
                     position={Position.Left}
@@ -123,7 +123,7 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
                 <Handle
                     type="source"
                     position={Position.Right}
-                    className="!w-6 !h-6 !bg-white !border !border-gray-300 !rounded-full !shadow-md !-right-[14px] opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-gray-400 hover:!shadow-lg hover:!scale-110"
+                    className="!w-6 !h-6 !bg-white !border !border-gray-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-gray-400 hover:!shadow-lg hover:!scale-110"
                     style={{ top: '50%', transform: 'translateY(-50%)' }}
                 >
                     <Plus size={14} className="text-gray-500 pointer-events-none" />
@@ -184,7 +184,7 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
 
                 {/* Settings Popup */}
                 {showSettings && (
-                    <div className="absolute top-8 left-6 w-52 bg-white rounded-xl shadow-xl border border-gray-200 p-3 z-30 animate-in fade-in zoom-in-95 duration-100">
+                    <div className="absolute top-8 left-6 w-52 bg-white rounded-xl shadow-2xl border border-gray-200 p-3 z-[9999] animate-in fade-in zoom-in-95 duration-100">
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] font-bold text-gray-400 uppercase">Config</span>
                         </div>

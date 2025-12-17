@@ -93,6 +93,23 @@ body {
   cursor: crosshair !important;
 }
 
+.scissors-mode,
+.scissors-mode * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24'%3E%3Ccircle cx='6' cy='18' r='2.2' fill='%23f472b6'/%3E%3Ccircle cx='6' cy='6' r='2.2' fill='%230ea5e9'/%3E%3Cpath d='M20 4 8.5 15.5' stroke='%23fb7185' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M20 20 12 12' stroke='%237c3aed' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") 10 10, crosshair !important;
+}
+
+.scissors-mode .react-flow__edge.edge-scissors-mode .react-flow__edge-path {
+  stroke: #cbd5e1;
+  stroke-width: 2.25;
+  transition: stroke 120ms ease, stroke-width 120ms ease, filter 120ms ease;
+}
+
+.scissors-mode .react-flow__edge.edge-scissors-mode.edge-scissors-hover .react-flow__edge-path {
+  stroke: #f97316;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px rgba(249, 115, 22, 0.5));
+}
+
 /* Layout Architecture */
 .app-shell {
   display: flex;

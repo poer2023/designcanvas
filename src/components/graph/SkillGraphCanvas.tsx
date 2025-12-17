@@ -12,7 +12,7 @@ import {
     type XYPosition,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useGraphStore, SKILL_TYPES, SkillNode } from '@/store/graphStore';
+import { useGraphStore, SKILL_TYPES, SkillNode, SkillEdge } from '@/store/graphStore';
 import SkillNodeComponent from './SkillNode';
 import TextCard from '@/components/cards/TextCard';
 import ImageStudio from '@/components/cards/ImageStudio';
@@ -29,7 +29,9 @@ const nodeTypes = {
     groupFrame: GroupFrame,
 } as NodeTypes;
 
-export type InteractionMode = 'select' | 'hand' | 'draw_group';
+export type InteractionMode = 'select' | 'hand' | 'draw_group' | 'scissors';
+
+const SCISSORS_CURSOR = 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'32\' height=\'32\' viewBox=\'0 0 24 24\'%3E%3Ccircle cx=\'6\' cy=\'18\' r=\'2.2\' fill=\'%23f472b6\'/%3E%3Ccircle cx=\'6\' cy=\'6\' r=\'2.2\' fill=\'%230ea5e9\'/%3E%3Cpath d=\'M20 4 8.5 15.5\' stroke=\'%23fb7185\' stroke-width=\'2\' stroke-linecap=\'round\'/%3E%3Cpath d=\'M20 20 12 12\' stroke=\'%237c3aed\' stroke-width=\'2\' stroke-linecap=\'round\'/%3E%3C/svg%3E") 10 10, crosshair';
 
 interface SkillGraphCanvasInnerProps {
     onNodeSelect?: (node: SkillNode | null) => void;
@@ -57,6 +59,7 @@ function SkillGraphCanvasInner({
 
     // Clipboard for copy/paste
     const clipboardRef = useRef<SkillNode | null>(null);
+    const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
     const {
         nodes,
@@ -67,6 +70,7 @@ function SkillGraphCanvasInner({
         onConnect,
         addNode,
         setNodes,
+        setEdges,
     } = useGraphStore();
 
     // Refs for copy/paste to avoid dependency array issues
@@ -617,12 +621,47 @@ function SkillGraphCanvasInner({
         if (isPanning) return { cursor: 'grabbing' };
         if (interactionMode === 'hand') return { cursor: 'grab' };
         if (interactionMode === 'draw_group') return { cursor: 'crosshair' };
+        if (interactionMode === 'scissors') return { cursor: SCISSORS_CURSOR };
         return {};
     };
 
+    const decoratedEdges = useMemo(() => {
+        return edges.map((edge) => {
+            const classNames = [edge.className];
+            if (interactionMode === 'scissors') classNames.push('edge-scissors-mode');
+            if (interactionMode === 'scissors' && hoveredEdgeId === edge.id) classNames.push('edge-scissors-hover');
+
+            return {
+                ...edge,
+                className: classNames.filter(Boolean).join(' '),
+            };
+        });
+    }, [edges, hoveredEdgeId, interactionMode]);
+
+    useEffect(() => {
+        if (interactionMode !== 'scissors') setHoveredEdgeId(null);
+    }, [interactionMode]);
+
+    // Handle edge click for scissors mode
+    const onEdgeClick = useCallback((_: React.MouseEvent, edge: SkillEdge) => {
+        if (interactionMode !== 'scissors') return;
+        // Remove the clicked edge
+        setEdges(edges.filter(e => e.id !== edge.id));
+    }, [interactionMode, edges, setEdges]);
+
+    const handleEdgeMouseEnter = useCallback((_: React.MouseEvent, edge: SkillEdge) => {
+        if (interactionMode !== 'scissors') return;
+        setHoveredEdgeId(edge.id);
+    }, [interactionMode]);
+
+    const handleEdgeMouseLeave = useCallback(() => {
+        if (interactionMode !== 'scissors') return;
+        setHoveredEdgeId(null);
+    }, [interactionMode]);
+
     return (
         <div
-            className={`w-full h-full relative ${isPanning ? 'panning-active' : ''} ${interactionMode === 'hand' ? 'hand-mode' : ''} ${interactionMode === 'draw_group' ? 'draw-group-mode' : ''}`}
+            className={`w-full h-full relative ${isPanning ? 'panning-active' : ''} ${interactionMode === 'hand' ? 'hand-mode' : ''} ${interactionMode === 'draw_group' ? 'draw-group-mode' : ''} ${interactionMode === 'scissors' ? 'scissors-mode' : ''}`}
             style={getCursorStyle()}
             ref={reactFlowWrapper}
             onPointerDownCapture={handleWrapperPointerDownCapture}
@@ -634,11 +673,14 @@ function SkillGraphCanvasInner({
         >
             <ReactFlow
                 nodes={nodes}
-                edges={edges}
+                edges={decoratedEdges}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
                 onNodeDragStop={onNodeDragStop}
+                onEdgeClick={onEdgeClick}
+                onEdgeMouseEnter={handleEdgeMouseEnter}
+                onEdgeMouseLeave={handleEdgeMouseLeave}
                 onDragOver={onDragOver}
                 onDrop={onDrop}
                 nodeTypes={nodeTypes}
@@ -652,13 +694,26 @@ function SkillGraphCanvasInner({
                 elementsSelectable={interactionMode === 'select'}
             >
                 <Background color="var(--border-subtle)" gap={24} size={1} />
-                <Controls className="!bg-panel !border-subtle !rounded-lg !shadow-lg" />
+
+                {/* Controls - Bottom Left */}
+                <Controls
+                    className="!bg-white/90 dark:!bg-gray-900/90 !backdrop-blur-sm !border !border-gray-200 dark:!border-gray-700 !rounded-xl !shadow-lg"
+                    showInteractive={false}
+                    position="bottom-left"
+                />
+
+                {/* MiniMap - Bottom Right */}
                 <MiniMap
-                    className="!bg-panel !border-subtle !rounded-lg"
+                    className="!bg-white/90 dark:!bg-gray-900/90 !backdrop-blur-sm !border !border-gray-200 dark:!border-gray-700 !rounded-xl !shadow-lg"
+                    style={{ width: 140, height: 90 }}
                     nodeColor={(node) => {
                         const n = node as SkillNode;
-                        return SKILL_TYPES[n.data?.skillType]?.color || '#666';
+                        return SKILL_TYPES[n.data?.skillType]?.color || '#888';
                     }}
+                    maskColor="rgba(0,0,0,0.08)"
+                    pannable
+                    zoomable
+                    position="bottom-right"
                 />
             </ReactFlow>
 

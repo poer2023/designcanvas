@@ -14,6 +14,7 @@ import {
     ChevronDown,
     MousePointer2,
     Hand,
+    Scissors,
 } from 'lucide-react';
 import type { InteractionMode } from '@/components/graph/SkillGraphCanvas';
 import type { GroupType } from '@/components/cards/GroupFrame';
@@ -121,8 +122,8 @@ export default function Dock({
                     <button
                         onClick={() => onInteractionModeChange('select')}
                         className={`p-2 rounded-lg transition-all ${interactionMode === 'select'
-                                ? 'bg-white text-black shadow-sm'
-                                : 'text-gray-400 hover:text-gray-600'
+                            ? 'bg-white text-black shadow-sm'
+                            : 'text-gray-400 hover:text-gray-600'
                             }`}
                         title="Select (V)"
                     >
@@ -131,12 +132,22 @@ export default function Dock({
                     <button
                         onClick={() => onInteractionModeChange('hand')}
                         className={`p-2 rounded-lg transition-all ${interactionMode === 'hand'
-                                ? 'bg-white text-black shadow-sm'
-                                : 'text-gray-400 hover:text-gray-600'
+                            ? 'bg-white text-black shadow-sm'
+                            : 'text-gray-400 hover:text-gray-600'
                             }`}
                         title="Hand Tool (H)"
                     >
                         <Hand size={18} />
+                    </button>
+                    <button
+                        onClick={() => onInteractionModeChange('scissors')}
+                        className={`p-2 rounded-lg transition-all ${interactionMode === 'scissors'
+                            ? 'bg-white text-red-500 shadow-sm'
+                            : 'text-gray-400 hover:text-gray-600'
+                            }`}
+                        title="Cut Connection (X)"
+                    >
+                        <Scissors size={18} />
                     </button>
                 </div>
 
@@ -180,8 +191,8 @@ export default function Dock({
                 <button
                     onClick={() => { setShowGroupMenu(!showGroupMenu); setShowTextMenu(false); }}
                     className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${showGroupMenu || interactionMode === 'draw_group'
-                            ? 'bg-purple-500/20 text-purple-500'
-                            : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                        ? 'bg-purple-500/20 text-purple-500'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
                         }`}
                     title="Draw Group (G)"
                 >
