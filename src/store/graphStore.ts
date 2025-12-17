@@ -70,6 +70,41 @@ export const SKILL_TYPES: Record<string, { name: string; color: string; icon: st
     'export': { name: 'Export', color: '#14B8A6', icon: '📤' },
 };
 
+// v1.7: Map skill types to new node types
+function getNodeTypeForSkill(skillType: string): string {
+    // Direct mappings for new v1.7 types
+    if (skillType === 'imageStudio') return 'imageStudio';
+    if (skillType === 'uploadImage') return 'uploadImage';
+    if (skillType === 'textCard' || skillType === 'notes' || skillType === 'brief') return 'textCard';
+    if (skillType.startsWith('group-') || ['style', 'refset', 'candidates', 'elements', 'blank'].includes(skillType)) return 'groupFrame';
+
+    // Legacy mappings
+    const textCards = ['brief', 'prompt-forge'];
+    const groupFrames = ['style-profiler', 'inspiration-pool', 'element-extract', 'compose'];
+
+    if (textCards.includes(skillType)) return 'textCard';
+    if (groupFrames.includes(skillType)) return 'groupFrame';
+    return 'skillNode';
+}
+
+// v1.7: Map skill types to group frame types
+function mapSkillToGroupType(skillType: string): string {
+    const mapping: Record<string, string> = {
+        'style-profiler': 'style',
+        'inspiration-pool': 'refset',
+        'batch-generate': 'candidates',
+        'element-extract': 'elements',
+        'compose': 'blank',
+        // Direct v1.7 types
+        'style': 'style',
+        'refset': 'refset',
+        'candidates': 'candidates',
+        'elements': 'elements',
+        'blank': 'blank',
+    };
+    return mapping[skillType] || 'blank';
+}
+
 const initialNodes: SkillNode[] = [];
 const initialEdges: SkillEdge[] = [];
 
@@ -104,24 +139,73 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     },
 
     addNode: (skillType, position) => {
+        // v1.7: Support new card types
+        const nodeType = getNodeTypeForSkill(skillType);
+
+        // v1.7 direct node types
+        if (nodeType === 'imageStudio' || nodeType === 'uploadImage' || nodeType === 'groupFrame') {
+            const newNode: SkillNode = {
+                id: uuidv4(),
+                type: nodeType,
+                position,
+                data: {
+                    skillId: skillType,
+                    skillName: nodeType === 'imageStudio' ? 'Image Studio' :
+                        nodeType === 'uploadImage' ? 'Upload Image' : 'Group',
+                    skillType: skillType,
+                    params: {},
+                    status: 'idle',
+                    locked: false,
+                    // Type-specific data
+                    ...(nodeType === 'imageStudio' && { state: 'empty', prompt: '', results: [] }),
+                    ...(nodeType === 'uploadImage' && { imageUrl: '', caption: '' }),
+                    ...(nodeType === 'groupFrame' && { groupType: mapSkillToGroupType(skillType) }),
+                },
+            };
+            set({ nodes: [...get().nodes, newNode] });
+            return;
+        }
+
+        // TextCard types
+        if (nodeType === 'textCard') {
+            const role = skillType === 'brief' ? 'brief' : 'notes';
+            const newNode: SkillNode = {
+                id: uuidv4(),
+                type: 'textCard',
+                position,
+                data: {
+                    skillId: skillType,
+                    skillName: role === 'brief' ? 'Brief' : 'Notes',
+                    skillType: skillType,
+                    params: {},
+                    status: 'idle',
+                    locked: false,
+                    role: role,
+                    content: '',
+                },
+            };
+            set({ nodes: [...get().nodes, newNode] });
+            return;
+        }
+
+        // Legacy skill types
         const skillInfo = SKILL_TYPES[skillType];
-        if (!skillInfo) return;
-
-        const newNode: SkillNode = {
-            id: uuidv4(),
-            type: 'skillNode',
-            position,
-            data: {
-                skillId: skillType,
-                skillName: skillInfo.name,
-                skillType: skillType,
-                params: {},
-                status: 'idle',
-                locked: false,
-            },
-        };
-
-        set({ nodes: [...get().nodes, newNode] });
+        if (skillInfo) {
+            const newNode: SkillNode = {
+                id: uuidv4(),
+                type: nodeType,
+                position,
+                data: {
+                    skillId: skillType,
+                    skillName: skillInfo.name,
+                    skillType: skillType,
+                    params: {},
+                    status: 'idle',
+                    locked: false,
+                },
+            };
+            set({ nodes: [...get().nodes, newNode] });
+        }
     },
 
     removeNode: (nodeId) => {

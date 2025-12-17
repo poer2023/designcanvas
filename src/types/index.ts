@@ -11,6 +11,24 @@ export interface Project {
     updated_at: string;
 }
 
+// Space extends Project with template and artifact tracking
+export interface Space extends Project {
+    template_id?: string;
+    recent_artifacts?: string[];
+}
+
+// Template for quick-start workflows
+export interface Template {
+    id: string;
+    name: string;
+    scene_tags: string[];
+    preview_image?: string;
+    default_output?: string;
+    graph_snapshot: GraphSnapshot;
+    skill_versions_lock: Record<string, string>;
+    default_params: Record<string, unknown>;
+}
+
 export interface StyleProfile {
     id: string;
     name: string;
@@ -46,8 +64,10 @@ export interface RefSet {
     id: string;
     name: string;
     project_id?: string;
-    items: RefSetItem[];
+    items?: RefSetItem[];
+    item_count?: number;
     clusters?: Cluster[];
+    cluster_count?: number;
     dedupe_map?: Record<string, string>;
     created_at: string;
     updated_at: string;
@@ -55,10 +75,12 @@ export interface RefSet {
 
 export interface RefSetItem {
     id: string;
-    image_url: string;
+    image_url?: string;
+    image_path?: string;
+    thumbnail_path?: string;
     source?: string;
     tags?: string[];
-    cluster_id?: string;
+    cluster_id?: string | number;
 }
 
 export interface Cluster {

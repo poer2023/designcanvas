@@ -82,6 +82,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* React Flow: make cursor match hand interactions (even when hovering nodes) */
+.hand-mode,
+.hand-mode * {
+  cursor: grab !important;
+}
+
+.draw-group-mode,
+.draw-group-mode * {
+  cursor: crosshair !important;
+}
+
 /* Layout Architecture */
 .app-shell {
   display: flex;
@@ -379,4 +390,13 @@ h6 {
 .badge-gray {
   background: var(--bg-hover);
   color: var(--text-secondary);
+}
+
+/* Force grabbing cursor when panning canvas */
+.panning-active,
+.panning-active *,
+.panning-active .react-flow__pane,
+.panning-active .react-flow__node,
+.panning-active .react-flow__viewport {
+  cursor: grabbing !important;
 }
