@@ -25,6 +25,11 @@ export interface Recipe {
     seeds: number[];
     skill_versions: Record<string, string>;
     asset_refs: AssetRef[];
+    // PRD v2.1: Run context fields
+    mode?: 'RUN_NODE' | 'RUN_FROM_HERE' | 'RUN_GROUP' | 'RUN_ALL';
+    start_node_id?: string;
+    affected_node_ids?: string[];
+    node_io_map?: Record<string, { inputs: unknown[]; outputs: unknown[] }>;
     created_at: string;
 }
 

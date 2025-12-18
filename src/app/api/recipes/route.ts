@@ -48,7 +48,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { project_id, graph_snapshot, node_runs, seeds, skill_versions, asset_refs } = body;
+        const {
+            project_id,
+            graph_snapshot,
+            node_runs,
+            seeds,
+            skill_versions,
+            asset_refs,
+            // PRD v2.1 fields
+            mode,
+            start_node_id,
+            affected_node_ids,
+            node_io_map
+        } = body;
 
         if (!project_id || !graph_snapshot) {
             return NextResponse.json(
@@ -64,6 +76,10 @@ export async function POST(request: NextRequest) {
             seeds: seeds || [],
             skill_versions: skill_versions || {},
             asset_refs: asset_refs || [],
+            mode,
+            start_node_id,
+            affected_node_ids,
+            node_io_map,
         });
 
         return NextResponse.json({ success: true, data: recipe });

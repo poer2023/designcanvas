@@ -109,6 +109,11 @@ CREATE TABLE IF NOT EXISTS recipes (
   seeds TEXT NOT NULL,          -- JSON array
   skill_versions TEXT NOT NULL, -- JSON object
   asset_refs TEXT NOT NULL,     -- JSON array
+  -- PRD v2.1: Run context fields
+  mode TEXT,                    -- 'RUN_NODE' | 'RUN_FROM_HERE' | 'RUN_GROUP' | 'RUN_ALL'
+  start_node_id TEXT,           -- Starting node ID
+  affected_node_ids TEXT,       -- JSON array of affected node IDs
+  node_io_map TEXT,             -- JSON: Record<nodeId, {inputs: SnapshotRef[], outputs: SnapshotRef[]}>
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );

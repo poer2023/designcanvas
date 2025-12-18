@@ -693,6 +693,32 @@ export async function runGraph(params: RunGraphParams, options: RunOptions = {})
         recipeStore.updateRecipeStatus(recipeId, 'success', Date.now() - runStartAt);
     }
 
+    // PRD v2.1: Persist recipe to database
+    const projectId = graph.projectId;
+    if (projectId && finalRecipe) {
+        try {
+            await fetch('/api/recipes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    project_id: projectId,
+                    graph_snapshot: { nodes: graph.nodes.map(n => ({ id: n.id, type: n.type })), edges: graph.edges.map(e => ({ id: e.id, source: e.source, target: e.target })) },
+                    node_runs: [],
+                    seeds: [],
+                    skill_versions: {},
+                    asset_refs: [],
+                    mode: finalRecipe.runMode,
+                    start_node_id: finalRecipe.startNodeId,
+                    affected_node_ids: finalRecipe.affectedNodeIds,
+                    node_io_map: finalRecipe.nodeIoMap,
+                }),
+            });
+            console.log(`[PRD v2.1] Recipe ${recipeId} persisted to DB`);
+        } catch (err) {
+            console.warn('[PRD v2.1] Failed to persist recipe to DB:', err);
+        }
+    }
+
     options.onComplete?.();
     return { recipeId, results: resultsByNodeId };
 }
