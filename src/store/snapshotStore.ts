@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 
+// Cached empty arrays to avoid infinite loop in React selectors
+// When selectors return `|| []`, a new array reference each time
+// causes useSyncExternalStore to think state changed, triggering infinite re-renders
+const EMPTY_SNAPSHOT_ARRAY: OutputSnapshot[] = [];
+const EMPTY_SUBSCRIPTION_ARRAY: Subscription[] = [];
+
 /**
  * PRD v1.8: Output Snapshot Protocol
  * PRD v2.1: Active Snapshot & Replace/Reset Semantics
@@ -193,7 +199,7 @@ export const useSnapshotStore = create<SnapshotState>((set, get) => ({
 
     // PRD v2.1: Get snapshot history for a producer+port
     getSnapshotHistory: (producerId, portKey) => {
-        return get().snapshotHistory[producerId]?.[portKey] || [];
+        return get().snapshotHistory[producerId]?.[portKey] || EMPTY_SNAPSHOT_ARRAY;
     },
 
     // PRD v2.1: Reset/clear all snapshots for a port (for Reset action)
@@ -276,7 +282,7 @@ export const useSnapshotStore = create<SnapshotState>((set, get) => ({
     },
 
     getSubscriptions: (subscriberId) => {
-        return get().subscriptions[subscriberId] || [];
+        return get().subscriptions[subscriberId] || EMPTY_SUBSCRIPTION_ARRAY;
     },
 
     markConsumed: (subscriberId, producerId, portKey, version) => {

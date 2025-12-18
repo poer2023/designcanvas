@@ -20,6 +20,10 @@ interface OpenRouterRequest {
     }[];
     modalities?: string[];
     max_tokens?: number;
+    // Gemini image generation specific
+    image_config?: {
+        aspect_ratio?: string;
+    };
 }
 
 interface OpenRouterResponse {
@@ -30,6 +34,11 @@ interface OpenRouterResponse {
                 type: string;
                 image_url?: { url: string };
                 text?: string;
+            }[];
+            // New images array format for Gemini models
+            images?: {
+                type: string;
+                image_url: { url: string };
             }[];
         };
     }[];
@@ -69,7 +78,7 @@ class OpenRouterAdapter implements ProviderAdapter {
                 ? request.params.seed + i
                 : Math.floor(Math.random() * 1000000);
 
-            const promptWithParams = this.buildPrompt(request.prompt, request.params, seed);
+            const promptWithParams = this.buildPrompt(request.prompt, request.params, seed, modelName);
 
             const body: OpenRouterRequest = {
                 model: modelName,
@@ -82,6 +91,13 @@ class OpenRouterAdapter implements ProviderAdapter {
                 modalities: ['text', 'image'],
                 max_tokens: 4096,
             };
+
+            // Add image_config for Gemini models (supports aspect ratio)
+            if (modelName.includes('gemini') && request.params.ratio) {
+                body.image_config = {
+                    aspect_ratio: request.params.ratio,
+                };
+            }
 
             const response = await fetch(`${this.baseUrl}/chat/completions`, {
                 method: 'POST',
@@ -189,23 +205,36 @@ class OpenRouterAdapter implements ProviderAdapter {
         return capability === 'text2img';
     }
 
-    private buildPrompt(prompt: string, params: GenerateRequest['params'], seed: number): string {
+    private buildPrompt(prompt: string, params: GenerateRequest['params'], seed: number, modelName?: string): string {
         const parts = [prompt];
 
-        // Add aspect ratio hint if specified
-        if (params.ratio && params.ratio !== '1:1') {
+        // Add aspect ratio hint if specified (skip for Gemini models which use image_config)
+        const isGemini = modelName?.includes('gemini');
+        if (!isGemini && params.ratio && params.ratio !== '1:1') {
             parts.push(`Aspect ratio: ${params.ratio}`);
         }
 
-        // Add seed for reproducibility (where supported)
-        parts.push(`[seed: ${seed}]`);
+        // Add seed for reproducibility (where supported, skip for Gemini)
+        if (!isGemini) {
+            parts.push(`[seed: ${seed}]`);
+        }
 
         return parts.join('. ');
     }
 
     private extractImageUrl(response: OpenRouterResponse): string | null {
-        const content = response.choices?.[0]?.message?.content;
+        const message = response.choices?.[0]?.message;
+        if (!message) return null;
 
+        // Handle new images array format (Gemini models)
+        if (message.images && message.images.length > 0) {
+            const firstImage = message.images[0];
+            if (firstImage.image_url?.url) {
+                return firstImage.image_url.url;
+            }
+        }
+
+        const content = message.content;
         if (!content) return null;
 
         // Handle array content (multimodal response)

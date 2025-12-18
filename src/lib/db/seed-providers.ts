@@ -80,6 +80,15 @@ const models: ModelSeed[] = [
         is_enabled: true,
         sort_order: 12,
     },
+    {
+        model_id: 'openrouter:google/gemini-2.5-flash-image',
+        provider_id: 'openrouter',
+        display_name: 'Gemini 2.5 Flash Image',
+        remote_model_name: 'google/gemini-2.5-flash-image',
+        capabilities: ['text2img'],
+        is_enabled: true,
+        sort_order: 13,
+    },
     // Cloudflare models
     {
         model_id: 'cloudflare:@cf/stabilityai/stable-diffusion-xl-base-1.0',
