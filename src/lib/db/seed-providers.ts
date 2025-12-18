@@ -108,6 +108,25 @@ const models: ModelSeed[] = [
         is_enabled: true,
         sort_order: 22,
     },
+    // Leonardo.AI models (Cloudflare Partner)
+    {
+        model_id: 'cloudflare:@cf/leonardoai/phoenix-1.0',
+        provider_id: 'cloudflare',
+        display_name: 'Leonardo Phoenix 1.0',
+        remote_model_name: '@cf/leonardoai/phoenix-1.0',
+        capabilities: ['text2img'],
+        is_enabled: true,
+        sort_order: 23,
+    },
+    {
+        model_id: 'cloudflare:@cf/leonardoai/lucid-origin',
+        provider_id: 'cloudflare',
+        display_name: 'Leonardo Lucid Origin',
+        remote_model_name: '@cf/leonardoai/lucid-origin',
+        capabilities: ['text2img'],
+        is_enabled: true,
+        sort_order: 24,
+    },
     // Hugging Face models
     {
         model_id: 'huggingface:black-forest-labs/FLUX.1-dev',
