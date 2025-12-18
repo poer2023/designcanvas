@@ -15,9 +15,20 @@ import {
     Trash2,
     Magnet,
     Plus,
+    PlayCircle,
+    AlertCircle,
 } from 'lucide-react';
+import { useSnapshotStore, type StaleState } from '@/store/snapshotStore';
 
-export type GroupType = 'style' | 'refset' | 'candidates' | 'elements' | 'blank';
+/**
+ * PRD v1.8: Group Frame Types
+ * - style (Portfolio): Extract style from images
+ * - refset: Build reference set
+ * - runGroup: Pipeline execution with topology sort
+ * - elements: Element extraction (stub)
+ * - blank: Pure grouping, no execution
+ */
+export type GroupType = 'style' | 'refset' | 'candidates' | 'elements' | 'blank' | 'runGroup';
 
 interface GroupFrameData {
     groupType: GroupType;
@@ -25,6 +36,8 @@ interface GroupFrameData {
     autoRun?: boolean;
     groupPrompt?: string;
     magnetic?: boolean;
+    // Run Group specific
+    runMode?: 'all' | 'dirtyOnly' | 'fromHere';
 }
 
 interface GroupFrameProps {
@@ -41,7 +54,7 @@ const GROUP_CONFIG: Record<GroupType, {
 }> = {
     style: {
         icon: Sparkles,
-        label: 'Style Extract',
+        label: 'Portfolio',  // PRD v1.8: Style Extract = Portfolio
         color: '#8B5CF6',
         outputLabel: 'Style',
     },
@@ -49,7 +62,13 @@ const GROUP_CONFIG: Record<GroupType, {
         icon: ImageIcon,
         label: 'RefSet',
         color: '#10B981',
-        outputLabel: 'Ref',
+        outputLabel: 'RefSet',
+    },
+    runGroup: {
+        icon: PlayCircle,
+        label: 'Run Group',
+        color: '#3B82F6',
+        outputLabel: 'Pipeline',
     },
     candidates: {
         icon: Sparkles,

@@ -4,8 +4,7 @@ import { useState } from 'react';
 import {
     Type,
     FileText,
-    Upload,
-    Sparkles,
+    Image as ImageIcon,
     LayoutGrid,
     Search,
     Undo2,
@@ -15,13 +14,22 @@ import {
     MousePointer2,
     Hand,
     Scissors,
+    PlayCircle,
 } from 'lucide-react';
 import type { InteractionMode } from '@/components/graph/SkillGraphCanvas';
 import type { GroupType } from '@/components/cards/GroupFrame';
 
+/**
+ * PRD v1.8: Dock 工具栏
+ * - 移除 Upload 按钮（图片通过 paste/drop 直接输入）
+ * - Text（Notes/Brief）
+ * - Image（创建 Image Studio 空卡）
+ * - Group（Portfolio/RefSet/Run Group/Elements/Blank）
+ * - Search
+ */
+
 interface DockProps {
     onAddText: (role: 'notes' | 'brief') => void;
-    onAddUploadImage: () => void;
     onAddImageStudio: () => void;
     onAddGroup: (type: GroupType) => void;
     onSearch: () => void;
@@ -35,17 +43,17 @@ interface DockProps {
     onInteractionModeChange: (mode: InteractionMode) => void;
 }
 
-const GROUP_TYPES: { type: GroupType; label: string; color: string }[] = [
-    { type: 'style', label: 'Style Extract', color: '#8B5CF6' },
+// PRD v1.8: Updated group types
+const GROUP_TYPES: { type: GroupType; label: string; color: string; icon?: typeof LayoutGrid }[] = [
+    { type: 'style', label: 'Portfolio', color: '#8B5CF6' },        // Style Extract = Portfolio
     { type: 'refset', label: 'RefSet', color: '#10B981' },
-    { type: 'candidates', label: 'Candidates', color: '#EF4444' },
+    { type: 'runGroup', label: 'Run Group', color: '#3B82F6', icon: PlayCircle },
     { type: 'elements', label: 'Elements', color: '#EC4899' },
     { type: 'blank', label: 'Blank', color: '#64748B' },
 ];
 
 export default function Dock({
     onAddText,
-    onAddUploadImage,
     onAddImageStudio,
     onAddGroup,
     onSearch,
@@ -167,22 +175,14 @@ export default function Dock({
                     <ChevronDown size={12} />
                 </button>
 
-                {/* Upload Image */}
-                <button
-                    onClick={onAddUploadImage}
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
-                >
-                    <Upload size={18} />
-                    <span>Upload</span>
-                </button>
-
-                {/* Image Studio */}
+                {/* Image (Studio) - PRD v1.8: Single button for Image Studio */}
                 <button
                     onClick={onAddImageStudio}
                     className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+                    title="Add Image Studio (I)"
                 >
-                    <Sparkles size={18} />
-                    <span>Studio</span>
+                    <ImageIcon size={18} />
+                    <span>Image</span>
                 </button>
 
                 <div className="w-px h-6 bg-[var(--border-subtle)]" />
@@ -207,6 +207,7 @@ export default function Dock({
                 <button
                     onClick={onSearch}
                     className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+                    title="Search (⌘K)"
                 >
                     <Search size={18} />
                 </button>

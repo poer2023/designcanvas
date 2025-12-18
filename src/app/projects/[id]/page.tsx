@@ -31,7 +31,7 @@ export default function SpacePage() {
 
     const { addNode } = useGraphStore();
 
-    // Keyboard shortcuts (v1.7)
+    // Keyboard shortcuts (v1.8)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             // Skip if in input/textarea
@@ -60,12 +60,7 @@ export default function SpacePage() {
                 e.preventDefault();
                 handleAddText('brief');
             }
-            // U - Add Upload Image
-            if (e.key === 'u' && !e.metaKey && !e.ctrlKey) {
-                e.preventDefault();
-                handleAddUploadImage();
-            }
-            // I - Add Image Studio
+            // I - Add Image Studio (PRD v1.8: No Upload shortcut, images paste/drop directly)
             if (e.key === 'i' && !e.metaKey && !e.ctrlKey) {
                 e.preventDefault();
                 handleAddImageStudio();
@@ -107,17 +102,13 @@ export default function SpacePage() {
         }
     }
 
-    // v1.7 Dock handlers
+    // v1.8 Dock handlers
     const handleAddText = useCallback((role: 'notes' | 'brief') => {
         addNode(role, { x: 400, y: 300 });
         setInteractionMode('select');
     }, [addNode]);
 
-    const handleAddUploadImage = useCallback(() => {
-        addNode('uploadImage', { x: 400, y: 300 });
-        setInteractionMode('select');
-    }, [addNode]);
-
+    // PRD v1.8: Creates Image Studio (imageCard with mode=studio)
     const handleAddImageStudio = useCallback(() => {
         addNode('imageStudio', { x: 400, y: 300 });
         setInteractionMode('select');
@@ -208,7 +199,6 @@ export default function SpacePage() {
                 {/* Dock Toolbar */}
                 <Dock
                     onAddText={handleAddText}
-                    onAddUploadImage={handleAddUploadImage}
                     onAddImageStudio={handleAddImageStudio}
                     onAddGroup={handleAddGroup}
                     onSearch={handleSearch}

@@ -16,16 +16,20 @@ import { useGraphStore, SKILL_TYPES, SkillNode, SkillEdge } from '@/store/graphS
 import SkillNodeComponent from './SkillNode';
 import TextCard from '@/components/cards/TextCard';
 import ImageStudio from '@/components/cards/ImageStudio';
-import UploadImage from '@/components/cards/UploadImage';
+import ImageCard from '@/components/cards/ImageCard';
 import GroupFrame, { GroupType } from '@/components/cards/GroupFrame';
 import { v4 as uuidv4 } from 'uuid';
 
-// Register all node types (v1.7)
+/**
+ * PRD v1.8: Node Types
+ * - imageCard: Unified image card with mode='raw'|'studio'
+ * - imageStudio: Legacy, kept for compatibility
+ */
 const nodeTypes = {
     skillNode: SkillNodeComponent,
     textCard: TextCard,
     imageStudio: ImageStudio,
-    uploadImage: UploadImage,
+    imageCard: ImageCard,
     groupFrame: GroupFrame,
 } as NodeTypes;
 
@@ -47,7 +51,7 @@ function SkillGraphCanvasInner({
     onInteractionModeChange
 }: SkillGraphCanvasInnerProps) {
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, getViewport } = useReactFlow();
 
     // Drawing State
     const [isDrawing, setIsDrawing] = useState(false);
@@ -81,7 +85,76 @@ function SkillGraphCanvasInner({
         setNodesRef.current = setNodes;
     }, [nodes, setNodes]);
 
-    // Copy/Paste keyboard shortcuts (Ctrl/Cmd+C, Ctrl/Cmd+V)
+    /**
+     * PRD v1.8: Canvas-level paste handler
+     * When user pastes an image to the canvas, auto-create a raw ImageCard
+     */
+    const handleCanvasPaste = useCallback((event: ClipboardEvent) => {
+        // Ignore if focus is on an input/textarea
+        const target = event.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+            return;
+        }
+
+        const items = event.clipboardData?.items;
+        if (!items) return;
+
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                const blob = item.getAsFile();
+                if (blob) {
+                    event.preventDefault();
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const imageUrl = e.target?.result as string;
+
+                        // Get center of viewport for placement
+                        const viewport = getViewport();
+                        const bounds = reactFlowWrapper.current?.getBoundingClientRect();
+                        const centerX = bounds ? bounds.width / 2 : 400;
+                        const centerY = bounds ? bounds.height / 2 : 300;
+
+                        const position = screenToFlowPosition({
+                            x: centerX,
+                            y: centerY,
+                        });
+
+                        // Create raw ImageCard
+                        const newNode: SkillNode = {
+                            id: uuidv4(),
+                            type: 'imageCard',
+                            position,
+                            data: {
+                                skillId: 'imageCard',
+                                skillName: 'Image',
+                                skillType: 'imageCard',
+                                params: {},
+                                status: 'idle',
+                                locked: false,
+                                mode: 'raw',
+                                imageUrl,
+                                source: 'paste',
+                            },
+                        };
+
+                        setNodesRef.current([...nodesRef.current, newNode]);
+                        console.log('[PRD v1.8] Auto-created raw ImageCard from paste');
+                    };
+                    reader.readAsDataURL(blob);
+                    return;
+                }
+            }
+        }
+    }, [screenToFlowPosition, getViewport]);
+
+    // Attach canvas paste listener
+    useEffect(() => {
+        document.addEventListener('paste', handleCanvasPaste);
+        return () => document.removeEventListener('paste', handleCanvasPaste);
+    }, [handleCanvasPaste]);
+
+    // Copy/Paste keyboard shortcuts (Ctrl/Cmd+C, Ctrl/Cmd+V for nodes)
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             // Ignore if focus is on an input/textarea
@@ -108,11 +181,10 @@ function SkillGraphCanvasInner({
                 }
             }
 
-            // Paste: Ctrl/Cmd+V
+            // Paste: Ctrl/Cmd+V (for nodes, not images - images handled by handleCanvasPaste)
             if (event.key === 'v' || event.key === 'V') {
                 if (!clipboardRef.current) {
-                    console.log('[Paste] Nothing in clipboard');
-                    return;
+                    return; // Let image paste handler take over
                 }
 
                 const copiedNode = clipboardRef.current;
