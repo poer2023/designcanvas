@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-    ArrowLeft, Download, Layers, ChevronDown, Undo2, Redo2
+    ArrowLeft, Download, Layers, ChevronDown, Undo2, Redo2,
+    Check, Loader2, AlertTriangle, Cloud, Upload
 } from 'lucide-react';
 import ThemeToggle from '@/components/layout/ThemeToggle';
 import dynamic from 'next/dynamic';
@@ -13,6 +14,16 @@ import Dock from '@/components/canvas/Dock';
 import CommandPalette from '@/components/canvas/CommandPalette';
 import type { InteractionMode } from '@/components/graph/SkillGraphCanvas';
 import type { GroupType } from '@/components/cards/GroupFrame';
+import { useAutoSave, useLoadGraph } from '@/lib/hooks/useAutoSave';
+import {
+    exportTemplate,
+    importTemplate,
+    downloadTemplate,
+    readTemplateFile,
+    isTemplateCompatible,
+    type TemplateNode,
+    type TemplateEdge,
+} from '@/lib/templateUtils';
 
 const SkillGraphCanvas = dynamic(() => import('@/components/graph/SkillGraphCanvas'), { ssr: false });
 
@@ -21,6 +32,9 @@ export default function SpacePage() {
     const router = useRouter();
     const [space, setSpace] = useState<Project | null>(null);
     const [loading, setLoading] = useState(true);
+    const [showConflictDialog, setShowConflictDialog] = useState(false);
+    const [showExportMenu, setShowExportMenu] = useState(false);
+    const importInputRef = useRef<HTMLInputElement>(null);
 
     // Interaction State
     const [interactionMode, setInteractionMode] = useState<InteractionMode>('select');
@@ -29,7 +43,16 @@ export default function SpacePage() {
     // Command Palette / Search state
     const [searchOpen, setSearchOpen] = useState(false);
 
-    const { addNode } = useGraphStore();
+    const { addNode, nodes, edges, viewport, setNodes, setEdges } = useGraphStore();
+
+    // PRD v2.0: Load graph on mount
+    useLoadGraph(params.id as string | undefined);
+
+    // PRD v2.0: Auto-save with debounce
+    const { saveStatus, saveNow, forceSave, hasConflict } = useAutoSave({
+        enabled: !!params.id,
+        onConflict: () => setShowConflictDialog(true),
+    });
 
     // Keyboard shortcuts (v1.8)
     useEffect(() => {
@@ -123,6 +146,60 @@ export default function SpacePage() {
         setSearchOpen(true);
     }, []);
 
+    // PRD v2.0: Template Export
+    const handleExportTemplate = useCallback((selectionOnly = false) => {
+        // Get selected node IDs
+        const selectedNodeIds = nodes.filter(n => n.selected).map(n => n.id);
+
+        const template = exportTemplate(
+            nodes as TemplateNode[],
+            edges as TemplateEdge[],
+            viewport,
+            {
+                selectionOnly,
+                selectedNodeIds,
+                includeViewport: true,
+                name: space?.name || 'template',
+            }
+        );
+
+        downloadTemplate(template, `${space?.name || 'template'}-${Date.now()}.json`);
+        setShowExportMenu(false);
+    }, [nodes, edges, viewport, space?.name]);
+
+    // PRD v2.0: Template Import
+    const handleImportTemplate = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const template = await readTemplateFile(file);
+
+            if (!isTemplateCompatible(template)) {
+                alert('This template was created with an incompatible version.');
+                return;
+            }
+
+            const { nodes: importedNodes, edges: importedEdges } = importTemplate(template, {
+                targetViewport: viewport,
+            });
+
+            // Add imported nodes and edges to existing graph
+            setNodes([...nodes, ...importedNodes as typeof nodes[number][]]);
+            setEdges([...edges, ...importedEdges as typeof edges[number][]]);
+
+            console.log(`[PRD v2.0] Imported ${importedNodes.length} nodes and ${importedEdges.length} edges`);
+        } catch (error) {
+            console.error('Failed to import template:', error);
+            alert('Failed to import template. Please check the file format.');
+        }
+
+        // Reset file input
+        if (importInputRef.current) {
+            importInputRef.current.value = '';
+        }
+    }, [nodes, edges, viewport, setNodes, setEdges]);
+
     if (loading) {
         return (
             <div className="fixed inset-0 flex items-center justify-center bg-[var(--bg-app)]">
@@ -160,8 +237,42 @@ export default function SpacePage() {
                     </div>
                 </div>
 
-                {/* Right: Theme + Undo/Redo + Export */}
+                {/* Right: Save Status + Theme + Undo/Redo + Export */}
                 <div className="flex items-center gap-1">
+                    {/* PRD v2.0: Save Status Indicator */}
+                    <div className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs">
+                        {saveStatus === 'saving' && (
+                            <>
+                                <Loader2 size={12} className="text-blue-500 animate-spin" />
+                                <span className="text-[var(--text-tertiary)]">Saving...</span>
+                            </>
+                        )}
+                        {saveStatus === 'saved' && (
+                            <>
+                                <Check size={12} className="text-green-500" />
+                                <span className="text-[var(--text-tertiary)]">Saved</span>
+                            </>
+                        )}
+                        {saveStatus === 'error' && (
+                            <>
+                                <AlertTriangle size={12} className="text-red-500" />
+                                <span className="text-red-500">Save failed</span>
+                            </>
+                        )}
+                        {saveStatus === 'conflict' && (
+                            <>
+                                <AlertTriangle size={12} className="text-orange-500" />
+                                <span className="text-orange-500">Conflict</span>
+                            </>
+                        )}
+                        {saveStatus === 'idle' && (
+                            <>
+                                <Cloud size={12} className="text-[var(--text-tertiary)]" />
+                            </>
+                        )}
+                    </div>
+
+                    <div className="w-px h-5 bg-[var(--border-subtle)]" />
                     <ThemeToggle />
                     <div className="w-px h-5 bg-[var(--border-subtle)] mx-1" />
                     <button
@@ -177,14 +288,107 @@ export default function SpacePage() {
                         <Redo2 size={14} />
                     </button>
                     <div className="w-px h-5 bg-[var(--border-subtle)] mx-1" />
-                    <button
-                        className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-                        title="Export"
-                    >
-                        <Download size={14} />
-                    </button>
+
+                    {/* PRD v2.0: Template Export/Import */}
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowExportMenu(!showExportMenu)}
+                            className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors flex items-center gap-1"
+                            title="Export/Import Template"
+                        >
+                            <Download size={14} />
+                            <ChevronDown size={10} />
+                        </button>
+
+                        {showExportMenu && (
+                            <>
+                                {/* Backdrop to close menu */}
+                                <div
+                                    className="fixed inset-0 z-40"
+                                    onClick={() => setShowExportMenu(false)}
+                                />
+                                <div className="absolute right-0 top-full mt-1 w-48 bg-[var(--bg-panel)] border border-[var(--border-default)] rounded-lg shadow-xl z-50 py-1">
+                                    <button
+                                        onClick={() => handleExportTemplate(false)}
+                                        className="w-full px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2"
+                                    >
+                                        <Download size={14} />
+                                        Export Canvas
+                                    </button>
+                                    <button
+                                        onClick={() => handleExportTemplate(true)}
+                                        className="w-full px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2"
+                                        disabled={!nodes.some(n => n.selected)}
+                                    >
+                                        <Download size={14} />
+                                        Export Selection
+                                    </button>
+                                    <div className="my-1 border-t border-[var(--border-subtle)]" />
+                                    <button
+                                        onClick={() => {
+                                            importInputRef.current?.click();
+                                            setShowExportMenu(false);
+                                        }}
+                                        className="w-full px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--bg-hover)] flex items-center gap-2"
+                                    >
+                                        <Upload size={14} />
+                                        Import Template
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Hidden file input for import */}
+                    <input
+                        ref={importInputRef}
+                        type="file"
+                        accept=".json"
+                        onChange={handleImportTemplate}
+                        className="hidden"
+                    />
                 </div>
             </header>
+
+            {/* PRD v2.0: Conflict Resolution Dialog */}
+            {showConflictDialog && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
+                    <div className="bg-[var(--bg-panel)] border border-[var(--border-default)] rounded-2xl p-6 max-w-md shadow-2xl">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                                <AlertTriangle className="text-orange-500" size={20} />
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-[var(--text-primary)]">Version Conflict</h3>
+                                <p className="text-sm text-[var(--text-secondary)]">This Space was updated elsewhere</p>
+                            </div>
+                        </div>
+                        <p className="text-sm text-[var(--text-secondary)] mb-6">
+                            Your changes conflict with changes made elsewhere. Choose how to proceed:
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => {
+                                    setShowConflictDialog(false);
+                                    window.location.reload();
+                                }}
+                                className="flex-1 px-4 py-2 rounded-lg border border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+                            >
+                                Reload
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    setShowConflictDialog(false);
+                                    await forceSave();
+                                }}
+                                className="flex-1 px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+                            >
+                                Force Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Full-screen Canvas */}
             <main className="flex-1 relative overflow-hidden">

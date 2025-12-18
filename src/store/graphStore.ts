@@ -11,6 +11,7 @@ import {
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
 import { getPortTypeForHandle, isPortCompatible, type PortType } from '@/types/skills';
+import { subscribeFromEdge, unsubscribeFromEdge, syncSubscriptionsFromEdges } from './snapshotStore';
 
 export type NodeStatus = 'idle' | 'running' | 'success' | 'fail';
 
@@ -39,6 +40,13 @@ interface GraphState {
     selectedNodeId: string | null;
     isRunning: boolean;
 
+    // PRD v2.0: Persistence state
+    projectId: string | null;
+    viewport: { x: number; y: number; zoom: number };
+    lastSavedVersion: number;
+    saveStatus: 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
+    isDirty: boolean;
+
     // Actions
     setNodes: (nodes: SkillNode[]) => void;
     setEdges: (edges: SkillEdge[]) => void;
@@ -62,6 +70,18 @@ interface GraphState {
     updateNodeParent: (nodeId: string, parentId: string | null) => void;
     detectNodeMembership: (nodeId: string) => string | null;
     getNodesInGroup: (groupId: string) => SkillNode[];
+
+    // PRD v2.0: Node data sync
+    updateNodeData: (nodeId: string, data: Partial<SkillNodeData>) => void;
+
+    // PRD v2.0: Persistence actions
+    setProjectId: (projectId: string | null) => void;
+    setViewport: (viewport: { x: number; y: number; zoom: number }) => void;
+    markDirty: () => void;
+    getGraphSnapshot: () => { nodes: unknown[]; edges: unknown[] };
+    loadFromServer: (projectId: string) => Promise<boolean>;
+    saveToServer: (force?: boolean) => Promise<boolean>;
+    setSaveStatus: (status: 'idle' | 'saving' | 'saved' | 'error' | 'conflict') => void;
 }
 
 // Skill type definitions for adding new nodes
@@ -120,8 +140,15 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     selectedNodeId: null,
     isRunning: false,
 
-    setNodes: (nodes) => set({ nodes }),
-    setEdges: (edges) => set({ edges }),
+    // PRD v2.0: Persistence state initialization
+    projectId: null,
+    viewport: { x: 0, y: 0, zoom: 1 },
+    lastSavedVersion: 0,
+    saveStatus: 'idle',
+    isDirty: false,
+
+    setNodes: (nodes) => set({ nodes, isDirty: true }),
+    setEdges: (edges) => set({ edges, isDirty: true }),
 
     onNodesChange: (changes) => {
         set({
@@ -130,9 +157,20 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     },
 
     onEdgesChange: (changes) => {
-        set({
-            edges: applyEdgeChanges(changes, get().edges),
-        });
+        const oldEdges = get().edges;
+        const newEdges = applyEdgeChanges(changes, oldEdges);
+
+        // PRD v2.0: Handle edge deletion for subscription cleanup
+        for (const change of changes) {
+            if (change.type === 'remove') {
+                const removedEdge = oldEdges.find(e => e.id === change.id);
+                if (removedEdge) {
+                    unsubscribeFromEdge(removedEdge);
+                }
+            }
+        }
+
+        set({ edges: newEdges, isDirty: true });
     },
 
     onConnect: (connection) => {
@@ -160,17 +198,20 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             // Still allow connection but mark it
         }
 
+        const newEdge: SkillEdge = {
+            ...connection,
+            id: uuidv4(),
+            animated: true,
+            data: { sourceType, targetType, valid: isPortCompatible(sourceType, targetType) }
+        };
+
         set({
-            edges: addEdge(
-                {
-                    ...connection,
-                    id: uuidv4(),
-                    animated: true,
-                    data: { sourceType, targetType, valid: isPortCompatible(sourceType, targetType) }
-                },
-                get().edges
-            ),
+            edges: addEdge(newEdge, get().edges as Edge[]) as SkillEdge[],
+            isDirty: true,
         });
+
+        // PRD v2.0: Create subscription for the new edge
+        subscribeFromEdge(newEdge);
     },
 
     addNode: (skillType, position) => {
@@ -332,5 +373,135 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     // Get all nodes in a group
     getNodesInGroup: (groupId: string) => {
         return get().nodes.filter(n => n.parentId === groupId);
+    },
+
+    // PRD v2.0: Update node data (for component state sync)
+    updateNodeData: (nodeId: string, data: Partial<SkillNodeData>) => {
+        set({
+            nodes: get().nodes.map((node) =>
+                node.id === nodeId
+                    ? { ...node, data: { ...node.data, ...data } }
+                    : node
+            ),
+            isDirty: true,
+        });
+    },
+
+    // PRD v2.0: Persistence actions
+    setProjectId: (projectId: string | null) => set({ projectId }),
+
+    setViewport: (viewport: { x: number; y: number; zoom: number }) => set({ viewport, isDirty: true }),
+
+    markDirty: () => set({ isDirty: true }),
+
+    setSaveStatus: (status: 'idle' | 'saving' | 'saved' | 'error' | 'conflict') => set({ saveStatus: status }),
+
+    getGraphSnapshot: () => {
+        const { nodes, edges } = get();
+        // Serialize nodes and edges for persistence
+        return {
+            nodes: nodes.map(node => ({
+                id: node.id,
+                type: node.type,
+                position: node.position,
+                parentId: node.parentId,
+                style: node.style,
+                data: node.data,
+            })),
+            edges: edges.map(edge => ({
+                id: edge.id,
+                source: edge.source,
+                target: edge.target,
+                sourceHandle: edge.sourceHandle,
+                targetHandle: edge.targetHandle,
+                data: edge.data,
+            })),
+        };
+    },
+
+    loadFromServer: async (projectId: string) => {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/graph`);
+            const result = await response.json();
+
+            if (!result.success) {
+                console.error('Failed to load graph:', result.error);
+                return false;
+            }
+
+            const { graph_snapshot, viewport, version } = result.data;
+
+            // Restore nodes and edges
+            set({
+                projectId,
+                nodes: (graph_snapshot.nodes || []) as SkillNode[],
+                edges: (graph_snapshot.edges || []) as SkillEdge[],
+                viewport: viewport || { x: 0, y: 0, zoom: 1 },
+                lastSavedVersion: version,
+                saveStatus: 'saved',
+                isDirty: false,
+            });
+
+            return true;
+        } catch (error) {
+            console.error('Error loading graph from server:', error);
+            return false;
+        }
+    },
+
+    saveToServer: async (force = false) => {
+        const { projectId, lastSavedVersion, isDirty, getGraphSnapshot, viewport } = get();
+
+        if (!projectId) {
+            console.error('No project ID set, cannot save');
+            return false;
+        }
+
+        if (!isDirty && !force) {
+            // Nothing to save
+            return true;
+        }
+
+        set({ saveStatus: 'saving' });
+
+        try {
+            const graphSnapshot = getGraphSnapshot();
+
+            const response = await fetch(`/api/projects/${projectId}/graph`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    base_version: lastSavedVersion,
+                    graph_snapshot: graphSnapshot,
+                    viewport,
+                    force,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!result.success) {
+                if (result.conflict) {
+                    set({ saveStatus: 'conflict' });
+                    console.warn('Version conflict detected, server version:', result.server_version);
+                    return false;
+                }
+                set({ saveStatus: 'error' });
+                console.error('Failed to save graph:', result.error);
+                return false;
+            }
+
+            set({
+                lastSavedVersion: result.data.version,
+                saveStatus: 'saved',
+                isDirty: false,
+            });
+
+            return true;
+        } catch (error) {
+            set({ saveStatus: 'error' });
+            console.error('Error saving graph to server:', error);
+            return false;
+        }
     },
 }));

@@ -252,3 +252,97 @@ export function canNodeRun(nodeId: string, requiredPorts: PortKey[]): boolean {
 
     return true;
 }
+
+// =============================================================================
+// PRD v2.0: Edge-based Subscription Helpers
+// =============================================================================
+
+export interface EdgeData {
+    id: string;
+    source: string;
+    target: string;
+    sourceHandle?: string | null;
+    targetHandle?: string | null;
+}
+
+// Map sourceHandle to PortKey
+function handleToPortKey(handleId: string | null | undefined): PortKey | null {
+    if (!handleId) return null;
+
+    const validPortKeys: PortKey[] = [
+        'imageOut', 'contextOut', 'briefOut',
+        'styleToken', 'refsetToken', 'candidatesToken', 'elementsToken'
+    ];
+
+    if (validPortKeys.includes(handleId as PortKey)) {
+        return handleId as PortKey;
+    }
+
+    return null;
+}
+
+/**
+ * Subscribe based on edge connection
+ * Called when a new edge is created
+ */
+export function subscribeFromEdge(edge: EdgeData): string | null {
+    const portKey = handleToPortKey(edge.sourceHandle);
+
+    if (!portKey) {
+        console.warn(`[PRD v2.0] Edge ${edge.id}: sourceHandle "${edge.sourceHandle}" is not a valid PortKey, skipping subscription`);
+        return null;
+    }
+
+    const store = useSnapshotStore.getState();
+    const subscriptionId = store.subscribe(edge.target, edge.source, portKey);
+
+    console.log(`[PRD v2.0] Created subscription: ${edge.source}:${portKey} → ${edge.target} (sub_id: ${subscriptionId})`);
+
+    return subscriptionId;
+}
+
+/**
+ * Unsubscribe based on edge deletion
+ * Called when an edge is removed
+ */
+export function unsubscribeFromEdge(edge: EdgeData): void {
+    const portKey = handleToPortKey(edge.sourceHandle);
+
+    if (!portKey) {
+        return;
+    }
+
+    const store = useSnapshotStore.getState();
+    const subs = store.getSubscriptions(edge.target);
+
+    // Find subscription matching this edge
+    const matchingSub = subs.find(s =>
+        s.producer_id === edge.source && s.port_key === portKey
+    );
+
+    if (matchingSub) {
+        store.unsubscribe(matchingSub.id);
+        console.log(`[PRD v2.0] Removed subscription: ${edge.source}:${portKey} → ${edge.target}`);
+    }
+}
+
+/**
+ * Sync all subscriptions based on current edges
+ * Called on graph load to rebuild subscription state
+ */
+export function syncSubscriptionsFromEdges(edges: EdgeData[]): void {
+    const store = useSnapshotStore.getState();
+
+    // Clear all existing subscriptions
+    for (const subscriberId of Object.keys(store.subscriptions)) {
+        store.unsubscribeAll(subscriberId);
+    }
+
+    // Create subscriptions from edges
+    for (const edge of edges) {
+        subscribeFromEdge(edge);
+    }
+
+    console.log(`[PRD v2.0] Synced ${edges.length} edges to subscriptions`);
+}
+

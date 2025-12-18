@@ -14,19 +14,29 @@ export interface PortDefinition {
 }
 
 // 各节点类型的输入/输出端口定义
+// PRD v2.0: Handle IDs must match exactly for proper edge → subscription binding
 export const NODE_PORTS: Record<string, { inputs: PortDefinition[]; outputs: PortDefinition[] }> = {
+    // ImageGen (ImageStudio / imageCard with mode=studio)
     imageStudio: {
         inputs: [
-            { id: 'brief', type: 'brief', label: 'Brief' },
-            { id: 'style', type: 'style', label: 'Style' },
-            { id: 'refset', type: 'refset', label: 'RefSet' },
-            { id: 'image', type: 'image', label: 'Image' },
+            { id: 'briefIn', type: 'brief', label: 'Brief' },
+            { id: 'styleIn', type: 'style', label: 'Style' },
+            { id: 'refsetIn', type: 'refset', label: 'RefSet' },
+            { id: 'imageIn', type: 'image', label: 'Image' },
         ],
         outputs: [
             { id: 'imageOut', type: 'image', label: 'Image' },
             { id: 'contextOut', type: 'context', label: 'Context' },
         ],
     },
+    // ImageCard (mode=raw) - raw image holder
+    imageCard: {
+        inputs: [],
+        outputs: [
+            { id: 'imageOut', type: 'image', label: 'Image' },
+        ],
+    },
+    // UploadImage (legacy, same as imageCard raw)
     uploadImage: {
         inputs: [],
         outputs: [
@@ -34,21 +44,30 @@ export const NODE_PORTS: Record<string, { inputs: PortDefinition[]; outputs: Por
             { id: 'contextOut', type: 'context', label: 'Context' },
         ],
     },
+    // TextCard (notes/brief)
     textCard: {
         inputs: [
-            { id: 'any', type: 'any', label: '' },
+            { id: 'anyIn', type: 'any', label: '' },
         ],
         outputs: [
             { id: 'briefOut', type: 'brief', label: 'Brief' },
         ],
     },
+    // GroupFrame - outputs depend on groupType
     groupFrame: {
         inputs: [
-            { id: 'any', type: 'any', label: '', multiple: true },
+            { id: 'anyIn', type: 'any', label: '', multiple: true },
         ],
         outputs: [
-            // 根据 groupType 动态决定输出类型
-            { id: 'tokenOut', type: 'any', label: 'Token' },
+            // Dynamic based on groupType:
+            // style → styleToken
+            // refset → refsetToken
+            // candidates → candidatesToken
+            // elements → elementsToken
+            { id: 'styleToken', type: 'style', label: 'Style Token' },
+            { id: 'refsetToken', type: 'refset', label: 'RefSet Token' },
+            { id: 'candidatesToken', type: 'candidates', label: 'Candidates Token' },
+            { id: 'elementsToken', type: 'elements', label: 'Elements Token' },
         ],
     },
 };

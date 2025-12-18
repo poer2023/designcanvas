@@ -136,3 +136,16 @@ CREATE INDEX IF NOT EXISTS idx_elements_project ON elements(project_id);
 CREATE INDEX IF NOT EXISTS idx_elements_poster ON elements(poster_id);
 CREATE INDEX IF NOT EXISTS idx_recipes_project ON recipes(project_id);
 CREATE INDEX IF NOT EXISTS idx_briefs_project ON briefs(project_id);
+
+-- PRD v2.0: Project Graphs table for canvas persistence
+CREATE TABLE IF NOT EXISTS project_graphs (
+  project_id TEXT PRIMARY KEY,
+  schema_version TEXT NOT NULL DEFAULT '2.0',
+  graph_snapshot_json TEXT NOT NULL DEFAULT '{"nodes":[],"edges":[]}',
+  viewport_json TEXT NOT NULL DEFAULT '{"x":0,"y":0,"zoom":1}',
+  version INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_graphs_updated ON project_graphs(updated_at DESC);
