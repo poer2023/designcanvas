@@ -11,8 +11,10 @@ import {
     ChevronDown,
     Plus,
     Minus,
-    GalleryHorizontalEnd
+    AlertTriangle,
+    Cpu
 } from 'lucide-react';
+import { useSettingsStore, useEnabledModels, type Model } from '@/store/settingsStore';
 
 // State machine states
 type StudioState = 'empty' | 'draft' | 'generated' | 'pinned';
@@ -30,7 +32,7 @@ interface ImageStudioData {
     prompt: string;
     negative?: string;
     compiledBrief?: string;
-    model: string;
+    model: string | null;
     ratio: string;
     resolution: string;
     count: number;
@@ -52,18 +54,29 @@ interface ImageStudioProps {
     selected?: boolean;
 }
 
-const MODELS = ['Seedream 4.5', 'SDXL', 'Flux', 'Midjourney'];
 const RATIOS = ['1:1', '3:2', '2:3', '16:9', '9:16'];
 const RESOLUTIONS = ['1K', '2K', '4K'];
 
 function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
+    // Settings store
+    const { loaded, fetchAll, defaults, models } = useSettingsStore();
+    const enabledModels = useEnabledModels('text2img');
+
+    // Initialize settings on mount
+    useEffect(() => {
+        if (!loaded) {
+            fetchAll();
+        }
+    }, [loaded, fetchAll]);
+
     // State
     const [state, setState] = useState<StudioState>(data.state || 'empty');
     const [status, setStatus] = useState<RunStatus>(data.status || 'idle');
     const [prompt, setPrompt] = useState(data.prompt || '');
+    const [error, setError] = useState<string | null>(null);
 
     // Controls
-    const [model, setModel] = useState(data.model || 'Seedream 4.5');
+    const [modelId, setModelId] = useState<string | null>(data.model || null);
     const [ratio, setRatio] = useState(data.ratio || '3:2');
     const [resolution, setResolution] = useState(data.resolution || '2K');
     const [count, setCount] = useState(data.count || 1);
@@ -75,6 +88,12 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
     // Results
     const [results, setResults] = useState<ImageResult[]>(data.results || []);
 
+    // Get effective model (with fallback to default)
+    const effectiveModelId = modelId || defaults?.default_text2img_model_id || null;
+    const currentModel = models.find(m => m.model_id === effectiveModelId);
+    const isModelDisabled = currentModel && !currentModel.is_enabled;
+    const isModelMissing = !currentModel && effectiveModelId;
+
     // Auto-resize textarea
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     useEffect(() => {
@@ -83,6 +102,24 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
             textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
         }
     }, [prompt]);
+
+    // Reserve space for the bottom controls so results aren't covered.
+    const controlsRef = useRef<HTMLDivElement>(null);
+    const [controlsHeight, setControlsHeight] = useState(140);
+    useEffect(() => {
+        const el = controlsRef.current;
+        if (!el) return;
+
+        const update = () => {
+            const next = Math.ceil(el.getBoundingClientRect().height);
+            setControlsHeight((prev) => (prev === next ? prev : next));
+        };
+
+        update();
+        const ro = new ResizeObserver(() => update());
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
 
     // Calculate content height based on ratio with fixed width (480px - 48px padding = 432px)
     const getContentDimensions = () => {
@@ -94,25 +131,86 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
     };
 
     const { height: contentHeight } = getContentDimensions();
+    const contentReservedHeight = controlsHeight + 16 + 16;
+
+    // Check if can run
+    const canRun = prompt.trim() && effectiveModelId && !isModelDisabled && !isModelMissing;
 
     const handleRun = useCallback(async () => {
-        if (!prompt.trim()) return;
+        if (!canRun || !effectiveModelId) return;
+
         setStatus('running');
         setState('draft');
+        setError(null);
 
-        // Mock generation
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+            // Call generation API
+            const response = await fetch('/api/generate/image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model_id: effectiveModelId,
+                    mode: 'text2img',
+                    prompt: prompt.trim(),
+                    params: {
+                        ratio,
+                        resolution,
+                        count,
+                    },
+                }),
+            });
 
-        const mockResults: ImageResult[] = Array.from({ length: count }, (_, i) => ({
-            id: `result-${Date.now()}-${i}`,
-            url: `https://picsum.photos/seed/${Date.now() + i}/400/600`, // In real app, this would match ratio
-            seed: Math.floor(Math.random() * 1000000),
-        }));
+            const data = await response.json();
 
-        setResults(mockResults);
-        setState('generated');
-        setStatus('done');
-    }, [prompt, count]);
+            if (!data.success) {
+                throw new Error(data.error || 'Generation failed');
+            }
+
+            const jobId = data.data.job_id;
+
+            // Poll for completion
+            let attempts = 0;
+            const maxAttempts = 60; // 30 seconds max
+
+            while (attempts < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                const statusRes = await fetch(`/api/jobs/${jobId}`);
+                const statusData = await statusRes.json();
+
+                if (!statusData.success) {
+                    throw new Error('Failed to get job status');
+                }
+
+                const job = statusData.data;
+
+                if (job.status === 'done' && job.outputs) {
+                    // Convert outputs to results
+                    const newResults: ImageResult[] = job.outputs.thumbnails.map((url: string, i: number) => ({
+                        id: job.outputs.asset_ids[i] || `result-${Date.now()}-${i}`,
+                        url,
+                        seed: job.outputs.seeds?.[i],
+                    }));
+
+                    setResults(newResults);
+                    setState('generated');
+                    setStatus('done');
+                    return;
+                }
+
+                if (job.status === 'error') {
+                    throw new Error(job.error || 'Generation failed');
+                }
+
+                attempts++;
+            }
+
+            throw new Error('Generation timed out');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Unknown error');
+            setStatus('error');
+        }
+    }, [canRun, effectiveModelId, prompt, ratio, resolution, count]);
 
     return (
         <div className="group/card relative">
@@ -163,18 +261,42 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                 <div className="flex items-center justify-between px-6 py-4 z-20">
                     <div className="flex items-center gap-2 text-gray-800">
                         <ImageIcon size={18} className="text-gray-600" />
-                        <span className="font-semibold text-sm">Image Generator #1</span>
+                        <span className="font-semibold text-sm">Image Generator</span>
                     </div>
+                    {/* Model Badge */}
+                    {currentModel && (
+                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${isModelDisabled ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
+                            }`}>
+                            {isModelDisabled && <AlertTriangle size={12} />}
+                            <Cpu size={12} />
+                            <span>{currentModel.display_name}</span>
+                        </div>
+                    )}
                 </div>
+
+                {/* Error Message */}
+                {error && (
+                    <div className="mx-6 mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm flex items-center gap-2">
+                        <AlertTriangle size={14} />
+                        {error}
+                    </div>
+                )}
+
+                {/* Model Disabled Warning */}
+                {isModelDisabled && (
+                    <div className="mx-6 mb-4 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm flex items-center gap-2">
+                        <AlertTriangle size={14} />
+                        <span>Model is disabled.</span>
+                        <a href="/settings" className="underline hover:no-underline">Enable in Settings</a>
+                    </div>
+                )}
 
                 {/* Main Content Area - Adaptive Height */}
                 <div
-                    className="px-6 pb-24 relative transition-all duration-500 ease-in-out"
-                    style={{ height: contentHeight + 96 }} // Add padding-bottom space (24px * 4 = 96px) roughly or just let it expand? 
-                // Actually user said "content bearing area" adapts.
-                // If we set explicit height here, flex-col parent will respect it.
+                    className="px-6 relative transition-all duration-500 ease-in-out"
+                    style={{ height: contentHeight + contentReservedHeight }}
                 >
-                    <div className="absolute inset-x-6 inset-y-0" style={{ height: contentHeight }}>
+                    <div className="absolute inset-x-6 top-0" style={{ height: contentHeight }}>
                         {results.length > 0 ? (
                             <div className={`grid gap-4 w-full h-full ${results.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                                 {results.map((res) => (
@@ -191,7 +313,10 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                 </div>
 
                 {/* Bottom Controls Container */}
-                <div className="absolute bottom-4 left-4 right-4 bg-gray-50/80 backdrop-blur-md rounded-[24px] p-4 border border-gray-100/50 shadow-sm transition-all hover:shadow-md hover:bg-gray-50 z-30">
+                <div
+                    ref={controlsRef}
+                    className="absolute bottom-4 left-4 right-4 bg-gray-50/80 backdrop-blur-md rounded-[24px] p-4 border border-gray-100/50 shadow-sm transition-all hover:shadow-md hover:bg-gray-50 z-30"
+                >
                     {/* Prompt Input */}
                     <textarea
                         ref={textareaRef}
@@ -204,28 +329,39 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                     />
 
                     {/* Control Row */}
-                    <div className="flex items-center gap-1.5 relative z-20 overflow-x-auto no-scrollbar mask-gradient-r">
-                        {/* Model Pill */}
+                    <div className="flex items-center gap-1.5 relative z-20">
+                        {/* Model Picker */}
                         <div className="relative shrink-0">
                             <button
                                 onClick={() => setShowDropdown(showDropdown === 'model' ? null : 'model')}
-                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${showDropdown === 'model' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'
+                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${isModelDisabled ? 'bg-yellow-100 text-yellow-700' :
+                                        showDropdown === 'model' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'
                                     }`}
                             >
-                                {model}
+                                <Cpu size={12} />
+                                {currentModel?.display_name || 'Select model'}
                                 <ChevronDown size={12} className={`transition-transform duration-200 ${showDropdown === 'model' ? 'rotate-180' : ''}`} />
                             </button>
                             {showDropdown === 'model' && (
-                                <div className="absolute bottom-full mb-2 left-0 w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden flex flex-col py-1 animate-in fade-in zoom-in-95 duration-100 origin-bottom-left">
-                                    {MODELS.map(m => (
-                                        <button
-                                            key={m}
-                                            onClick={() => { setModel(m); setShowDropdown(null); }}
-                                            className={`px-3 py-2 text-xs text-left hover:bg-gray-50 transition-colors ${model === m ? 'font-medium text-blue-600 bg-blue-50' : 'text-gray-700'}`}
-                                        >
-                                            {m}
-                                        </button>
-                                    ))}
+                                <div className="absolute bottom-full mb-2 left-0 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden flex flex-col py-1 animate-in fade-in zoom-in-95 duration-100 origin-bottom-left max-h-64 overflow-y-auto">
+                                    {enabledModels.length === 0 ? (
+                                        <div className="px-3 py-4 text-xs text-gray-400 text-center">
+                                            No models enabled.
+                                            <a href="/settings" className="block text-blue-500 mt-1">Go to Settings</a>
+                                        </div>
+                                    ) : (
+                                        enabledModels.map(m => (
+                                            <button
+                                                key={m.model_id}
+                                                onClick={() => { setModelId(m.model_id); setShowDropdown(null); }}
+                                                className={`px-3 py-2 text-xs text-left hover:bg-gray-50 transition-colors ${effectiveModelId === m.model_id ? 'font-medium text-blue-600 bg-blue-50' : 'text-gray-700'
+                                                    }`}
+                                            >
+                                                <div className="font-medium">{m.display_name}</div>
+                                                <div className="text-[10px] text-gray-400">{m.model_id}</div>
+                                            </button>
+                                        ))
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -310,16 +446,22 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                         {/* Run Button */}
                         <button
                             onClick={handleRun}
-                            disabled={!prompt || status === 'running'}
+                            disabled={!canRun || status === 'running'}
                             className={`
-                                w-8 h-8 rounded-full flex items-center justify-center transition-all shrink-0
-                                ${!prompt ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-black hover:scale-105 shadow-md active:scale-95'}
+                                group w-8 h-8 rounded-full flex items-center justify-center shrink-0
+                                transition-colors
+                                ${!canRun ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-black active:bg-gray-900 shadow-md'}
                             `}
+                            title={!effectiveModelId ? 'No model selected' : isModelDisabled ? 'Model is disabled' : ''}
                         >
                             {status === 'running' ? (
                                 <Loader2 size={16} className="animate-spin" />
                             ) : (
-                                <Play size={14} fill="currentColor" className="ml-0.5" />
+                                <Play
+                                    size={14}
+                                    fill="currentColor"
+                                    className="ml-0.5 transition-transform duration-150 group-hover:scale-105 group-active:scale-95"
+                                />
                             )}
                         </button>
                     </div>

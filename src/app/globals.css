@@ -417,3 +417,14 @@ h6 {
 .panning-active .react-flow__viewport {
   cursor: grabbing !important;
 }
+
+@layer utilities {
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE/Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+}

@@ -41,25 +41,49 @@ export function getDb(): Database.Database {
 
 function initializeSchema() {
     const schemaPath = path.join(process.cwd(), 'src/lib/db/schema.sql');
-    const schema = fs.readFileSync(schemaPath, 'utf-8');
+    const schemaV19Path = path.join(process.cwd(), 'src/lib/db/schema-v1.9.sql');
 
-    // Execute schema (split by semicolons and run each statement)
-    const statements = schema
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
+    // Load both schemas
+    const schemas = [schemaPath, schemaV19Path];
 
-    for (const statement of statements) {
-        try {
-            getDbInstance().exec(statement + ';');
-        } catch (error) {
-            // Ignore "table already exists" errors
-            if (!(error instanceof Error) || !error.message.includes('already exists')) {
-                console.error('Schema error:', error);
+    for (const schemaFile of schemas) {
+        if (!fs.existsSync(schemaFile)) {
+            console.log(`Schema file not found: ${schemaFile}`);
+            continue;
+        }
+
+        const schema = fs.readFileSync(schemaFile, 'utf-8');
+
+        // Remove multi-line comments 
+        const withoutBlockComments = schema.replace(/\/\*[\s\S]*?\*\//g, '');
+
+        // Remove single-line comments
+        const lines = withoutBlockComments.split('\n')
+            .map(line => {
+                const commentIdx = line.indexOf('--');
+                return commentIdx >= 0 ? line.substring(0, commentIdx) : line;
+            })
+            .join('\n');
+
+        // Split by semicolons and execute each statement
+        const statements = lines
+            .split(';')
+            .map(s => s.trim())
+            .filter(s => s.length > 0);
+
+        for (const statement of statements) {
+            try {
+                getDbInstance().exec(statement + ';');
+            } catch (error) {
+                // Ignore "table already exists" errors
+                if (!(error instanceof Error) || !error.message.includes('already exists')) {
+                    console.error('Schema error:', error);
+                }
             }
         }
     }
 }
+
 
 function getDbInstance(): Database.Database {
     if (!db) {

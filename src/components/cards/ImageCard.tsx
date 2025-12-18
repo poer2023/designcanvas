@@ -116,6 +116,27 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
         }
     }, [prompt]);
 
+    // Reserve space for the bottom controls so results/dropdowns aren't covered.
+    const controlsRef = useRef<HTMLDivElement>(null);
+    const [controlsHeight, setControlsHeight] = useState(140);
+    useEffect(() => {
+        if (mode !== 'studio') return;
+        const el = controlsRef.current;
+        if (!el) return;
+
+        const update = () => {
+            const next = Math.ceil(el.getBoundingClientRect().height);
+            setControlsHeight((prev) => (prev === next ? prev : next));
+        };
+
+        update();
+        const ro = new ResizeObserver(() => update());
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [mode]);
+
+    const contentReservedHeight = controlsHeight + 16 + 16;
+
     // Raw mode handlers
     const handleDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -398,7 +419,10 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                 </div>
 
                 {/* Results Area */}
-                <div className="flex-1 px-6 pb-24 relative min-h-[180px]">
+                <div
+                    className="flex-1 px-6 relative min-h-[180px]"
+                    style={{ paddingBottom: contentReservedHeight }}
+                >
                     {results.length > 0 ? (
                         <div className={`grid gap-3 ${results.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                             {results.map((res) => (
@@ -415,7 +439,10 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                 </div>
 
                 {/* Bottom Controls */}
-                <div className="absolute bottom-4 left-4 right-4 bg-gray-50/80 backdrop-blur-md rounded-[24px] p-4 border border-gray-100/50 shadow-sm transition-all hover:shadow-md hover:bg-gray-50 z-30">
+                <div
+                    ref={controlsRef}
+                    className="absolute bottom-4 left-4 right-4 bg-gray-50/80 backdrop-blur-md rounded-[24px] p-4 border border-gray-100/50 shadow-sm transition-all hover:shadow-md hover:bg-gray-50 z-30"
+                >
                     {/* Prompt Input */}
                     <textarea
                         ref={textareaRef}
@@ -531,14 +558,19 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                             onClick={handleRun}
                             disabled={!prompt || runStatus === 'running'}
                             className={`
-                                w-8 h-8 rounded-full flex items-center justify-center transition-all
-                                ${!prompt ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-black hover:scale-105 shadow-md active:scale-95'}
+                                group w-8 h-8 rounded-full flex items-center justify-center
+                                transition-colors
+                                ${!prompt ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-800 text-white hover:bg-black active:bg-gray-900 shadow-md'}
                             `}
                         >
                             {runStatus === 'running' ? (
                                 <Loader2 size={16} className="animate-spin" />
                             ) : (
-                                <Play size={14} fill="currentColor" className="ml-0.5" />
+                                <Play
+                                    size={14}
+                                    fill="currentColor"
+                                    className="ml-0.5 transition-transform duration-150 group-hover:scale-105 group-active:scale-95"
+                                />
                             )}
                         </button>
                     </div>
