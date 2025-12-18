@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, memo, useRef, useEffect } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Handle, NodeToolbar, Position } from '@xyflow/react';
 import {
     Image as ImageIcon,
     Star,
@@ -19,6 +19,9 @@ import {
     AlertCircle,
 } from 'lucide-react';
 import { useSnapshotStore, type StaleState, type PortKey } from '@/store/snapshotStore';
+import { ActionBar, type ActionId } from '@/components/canvas/ActionBar';
+import { useGraphStore } from '@/store/graphStore';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * PRD v1.8: Unified Image Card
@@ -40,6 +43,9 @@ export interface ImageResult {
 
 export interface ImageCardData {
     mode: ImageCardMode;
+    // GraphStore common fields
+    skillName?: string;
+    error?: string;
     // Raw mode
     imageUrl?: string;
     caption?: string;
@@ -66,6 +72,7 @@ export interface ImageCardData {
     // Common
     favorite?: boolean;
     locked?: boolean;
+    color?: string;
     staleState?: StaleState;
 }
 
@@ -83,8 +90,11 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
     const mode = data.mode || 'raw';
 
     // Common state
-    const [favorite, setFavorite] = useState(data.favorite || false);
-    const [locked, setLocked] = useState(data.locked || false);
+    const favorite = !!data.favorite;
+    const locked = !!data.locked;
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const { nodes, setNodes, removeNode, updateNodeData } = useGraphStore();
+    const resetSnapshots = useSnapshotStore(state => state.resetSnapshots);
 
     // Raw mode state
     const [imageUrl, setImageUrl] = useState(data.imageUrl || '');
@@ -148,12 +158,13 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
             reader.onload = (event) => {
                 const url = event.target?.result as string;
                 setImageUrl(url);
+                updateNodeData(id, { imageUrl: url, source: 'dragdrop' });
                 // Create output snapshot
                 createSnapshot(id, 'imageOut', { imageUrl: url, source: 'dragdrop' });
             };
             reader.readAsDataURL(files[0]);
         }
-    }, [id, createSnapshot]);
+    }, [id, createSnapshot, updateNodeData]);
 
     const handlePaste = useCallback((e: React.ClipboardEvent) => {
         const items = e.clipboardData.items;
@@ -165,6 +176,7 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                     reader.onload = (event) => {
                         const url = event.target?.result as string;
                         setImageUrl(url);
+                        updateNodeData(id, { imageUrl: url, source: 'paste' });
                         // Create output snapshot
                         createSnapshot(id, 'imageOut', { imageUrl: url, source: 'paste' });
                     };
@@ -172,7 +184,89 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                 }
             }
         }
-    }, [id, createSnapshot]);
+    }, [id, createSnapshot, updateNodeData]);
+
+    const handleReplaceInput = useCallback(() => {
+        fileInputRef.current?.click();
+    }, []);
+
+    const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const url = event.target?.result as string;
+            setImageUrl(url);
+            updateNodeData(id, { imageUrl: url, source: 'picker' });
+            createSnapshot(id, 'imageOut', { imageUrl: url, source: 'picker' });
+        };
+        reader.readAsDataURL(file);
+
+        // reset input value so selecting the same file triggers change
+        e.target.value = '';
+    }, [id, createSnapshot, updateNodeData]);
+
+    const handleResetInput = useCallback(() => {
+        setImageUrl('');
+        updateNodeData(id, { imageUrl: '', source: undefined });
+        resetSnapshots(id, 'imageOut' as PortKey);
+    }, [id, resetSnapshots, updateNodeData]);
+
+    const cycleColor = useCallback(() => {
+        const colors = [undefined, '#FEF3C7', '#DBEAFE', '#DCFCE7', '#FCE7F3', '#E0E7FF'] as const;
+        const current = data.color as string | undefined;
+        const currentIndex = Math.max(0, colors.findIndex(c => c === current));
+        const next = colors[(currentIndex + 1) % colors.length];
+        updateNodeData(id, { color: next });
+    }, [id, data.color, updateNodeData]);
+
+    const handleAction = useCallback((actionId: ActionId) => {
+        switch (actionId) {
+            case 'replaceInput':
+                handleReplaceInput();
+                break;
+            case 'resetInput':
+                handleResetInput();
+                break;
+            case 'rename': {
+                const currentName = (data.skillName as string | undefined) || 'Image';
+                const nextName = window.prompt('Rename node', currentName);
+                if (nextName && nextName.trim()) updateNodeData(id, { skillName: nextName.trim() });
+                break;
+            }
+            case 'duplicate': {
+                const nodeToCopy = nodes.find(n => n.id === id);
+                if (!nodeToCopy) return;
+                const newNode = {
+                    ...JSON.parse(JSON.stringify(nodeToCopy)),
+                    id: uuidv4(),
+                    position: {
+                        x: nodeToCopy.position.x + 50,
+                        y: nodeToCopy.position.y + 50,
+                    },
+                    parentId: undefined,
+                    selected: false,
+                };
+                setNodes([...nodes, newNode]);
+                break;
+            }
+            case 'delete':
+                removeNode(id);
+                break;
+            case 'lock':
+            case 'unlock': {
+                updateNodeData(id, { locked: !locked });
+                break;
+            }
+            case 'color':
+                cycleColor();
+                break;
+            default:
+                break;
+        }
+    }, [handleReplaceInput, handleResetInput, data.skillName, id, locked, updateNodeData, nodes, setNodes, removeNode, cycleColor]);
 
     // Studio mode handlers
     const handleRun = useCallback(async () => {
@@ -221,6 +315,25 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
     if (mode === 'raw') {
         return (
             <div className="group/card relative">
+                {/* PRD v2.1: Action Bar */}
+                <NodeToolbar isVisible={selected} position={Position.Top} offset={10}>
+                    <ActionBar
+                        nodeId={id}
+                        nodeType="uploadImage"
+                        isLocked={locked}
+                        isRunning={false}
+                        hasResults={!!imageUrl}
+                        onAction={handleAction}
+                    />
+                </NodeToolbar>
+
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                />
                 {/* Left Handle (Target) - Full height hit area */}
                 <div className="absolute -left-6 top-0 h-full w-6 z-10 group/handle flex items-center justify-center">
                     <Handle
@@ -252,6 +365,7 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                         ${selected ? 'ring-2 ring-gray-400 shadow-2xl' : 'shadow-lg border border-gray-200'}
                         ${isFinal ? 'ring-2 ring-amber-400' : ''}
                     `}
+                    style={{ backgroundColor: (data.color as string | undefined) || undefined }}
                     onPaste={handlePaste}
                 >
                     {staleIndicator}
@@ -264,7 +378,7 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                         </div>
                         <div className="flex gap-1">
                             <button
-                                onClick={() => setFavorite(!favorite)}
+                                onClick={() => updateNodeData(id, { favorite: !favorite })}
                                 className={`p-1.5 rounded-full transition-colors ${favorite
                                     ? 'text-amber-500 bg-amber-50'
                                     : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
@@ -273,7 +387,7 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                                 <Star size={14} fill={favorite ? 'currentColor' : 'none'} />
                             </button>
                             <button
-                                onClick={() => setLocked(!locked)}
+                                onClick={() => updateNodeData(id, { locked: !locked })}
                                 className={`p-1.5 rounded-full transition-colors ${locked
                                     ? 'text-blue-500 bg-blue-50'
                                     : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
@@ -315,6 +429,7 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                         <input
                             value={caption}
                             onChange={(e) => setCaption(e.target.value)}
+                            onBlur={() => updateNodeData(id, { caption })}
                             placeholder="Add caption..."
                             className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
                         />
@@ -395,7 +510,7 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                     </div>
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => setFavorite(!favorite)}
+                            onClick={() => updateNodeData(id, { favorite: !favorite })}
                             className={`p-2 rounded-full transition-colors ${favorite
                                 ? 'text-amber-500 bg-amber-50'
                                 : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
@@ -404,7 +519,7 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                             <Star size={16} fill={favorite ? 'currentColor' : 'none'} />
                         </button>
                         <button
-                            onClick={() => setLocked(!locked)}
+                            onClick={() => updateNodeData(id, { locked: !locked })}
                             className={`p-2 rounded-full transition-colors ${locked
                                 ? 'text-blue-500 bg-blue-50'
                                 : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
@@ -454,19 +569,20 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                         style={{ minHeight: '24px', maxHeight: '96px' }}
                     />
 
-                    {/* Control Row */}
-                    <div className="flex items-center gap-2 relative z-20">
-                        {/* Model Dropdown */}
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowDropdown(showDropdown === 'model' ? null : 'model')}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${showDropdown === 'model' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'}`}
-                            >
-                                {model}
-                                <ChevronDown size={12} className={`transition-transform ${showDropdown === 'model' ? 'rotate-180' : ''}`} />
-                            </button>
-                            {showDropdown === 'model' && (
-                                <div className="absolute bottom-full mb-2 left-0 w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden flex flex-col py-1">
+	                    {/* Control Row */}
+	                    <div className="flex items-center gap-2 relative z-20">
+	                        {/* Model Dropdown */}
+	                        <div className="relative min-w-0">
+	                            <button
+	                                onClick={() => setShowDropdown(showDropdown === 'model' ? null : 'model')}
+	                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors min-w-0 whitespace-nowrap ${showDropdown === 'model' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'}`}
+	                                title={model}
+	                            >
+	                                <span className="min-w-0 truncate">{model}</span>
+	                                <ChevronDown size={12} className={`shrink-0 transition-transform ${showDropdown === 'model' ? 'rotate-180' : ''}`} />
+	                            </button>
+	                            {showDropdown === 'model' && (
+	                                <div className="absolute bottom-full mb-2 left-0 w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden flex flex-col py-1">
                                     {MODELS.map(m => (
                                         <button
                                             key={m}

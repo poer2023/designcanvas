@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { Square, Lasso, Check, X, Undo2 } from 'lucide-react';
 import type { SelectionPath, BoundingBox } from '@/types/element';
 
@@ -27,16 +27,28 @@ export default function SelectionCanvas({
     const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
     const [currentPoint, setCurrentPoint] = useState<{ x: number; y: number } | null>(null);
     const [lassoPoints, setLassoPoints] = useState<Array<{ x: number; y: number }>>([]);
-    const [scale, setScale] = useState(1);
 
-    // Calculate scale to fit image in view
-    useEffect(() => {
-        const maxWidth = window.innerWidth * 0.6;
-        const maxHeight = window.innerHeight * 0.7;
+    const viewport = useSyncExternalStore(
+        (onChange) => {
+            window.addEventListener('resize', onChange);
+            return () => window.removeEventListener('resize', onChange);
+        },
+        () => `${window.innerWidth}x${window.innerHeight}`,
+        () => '0x0'
+    );
+
+    // Calculate scale to fit image in view (derived, no local state needed)
+    const scale = useMemo(() => {
+        const [vw, vh] = viewport.split('x').map(Number);
+        if (!vw || !vh) return 1;
+        if (!imageWidth || !imageHeight) return 1;
+
+        const maxWidth = vw * 0.6;
+        const maxHeight = vh * 0.7;
         const scaleX = maxWidth / imageWidth;
         const scaleY = maxHeight / imageHeight;
-        setScale(Math.min(scaleX, scaleY, 1));
-    }, [imageWidth, imageHeight]);
+        return Math.min(scaleX, scaleY, 1);
+    }, [viewport, imageWidth, imageHeight]);
 
     const getCanvasPoint = useCallback((e: React.MouseEvent) => {
         const canvas = canvasRef.current;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, memo, useRef, useEffect } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, NodeToolbar } from '@xyflow/react';
 import {
     Sparkles,
     Play,
@@ -9,16 +9,25 @@ import {
     Image as ImageIcon,
     Loader2,
     ChevronDown,
+    ChevronLeft,
+    ChevronRight,
     Plus,
     Minus,
     AlertTriangle,
-    Cpu
+    Cpu,
+    X,
 } from 'lucide-react';
 import { useSettingsStore, useEnabledModels, type Model } from '@/store/settingsStore';
+import { useSnapshotStore, type PortKey } from '@/store/snapshotStore';
+import { useGraphStore } from '@/store/graphStore';
+import { ActionBar, type ActionId } from '@/components/canvas/ActionBar';
+import { v4 as uuidv4 } from 'uuid';
+import { runGraph } from '@/lib/engine/runner';
+
 
 // State machine states
 type StudioState = 'empty' | 'draft' | 'generated' | 'pinned';
-type RunStatus = 'idle' | 'running' | 'done' | 'error';
+type RunStatus = 'idle' | 'running' | 'success' | 'fail';
 
 interface ImageResult {
     id: string;
@@ -29,6 +38,10 @@ interface ImageResult {
 interface ImageStudioData {
     state: StudioState;
     status: RunStatus;
+    // GraphStore common fields
+    skillName?: string;
+    error?: string;
+    color?: string;
     prompt: string;
     negative?: string;
     compiledBrief?: string;
@@ -71,7 +84,13 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
 
     // State
     const [state, setState] = useState<StudioState>(data.state || 'empty');
-    const [status, setStatus] = useState<RunStatus>(data.status || 'idle');
+    const [status, setStatus] = useState<RunStatus>(() => {
+        const raw = data.status as unknown;
+        if (raw === 'done') return 'success';
+        if (raw === 'error') return 'fail';
+        if (raw === 'idle' || raw === 'running' || raw === 'success' || raw === 'fail') return raw;
+        return 'idle';
+    });
     const [prompt, setPrompt] = useState(data.prompt || '');
     const [error, setError] = useState<string | null>(null);
 
@@ -85,8 +104,20 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
     const [showSettings, setShowSettings] = useState(false);
     const [showDropdown, setShowDropdown] = useState<'model' | 'ratio' | 'resolution' | null>(null);
 
+    // Preview lightbox
+    const [showLightbox, setShowLightbox] = useState(false);
+    const [lightboxIndex, setLightboxIndex] = useState(0);
+
     // Results
     const [results, setResults] = useState<ImageResult[]>(data.results || []);
+    const imageHistory = useSnapshotStore(state => state.getSnapshotHistory(id, 'imageOut' as PortKey));
+    const activeImageSnapshotId = useSnapshotStore(state => state.activeByProducerPort[`${id}:imageOut`]);
+    const hasBriefInput = useSnapshotStore(state => {
+        const subs = state.getSubscriptions(id);
+        return subs
+            .filter(s => s.port_key === 'briefOut')
+            .some(s => !!state.getSnapshot(s.producer_id, s.port_key));
+    });
 
     // Get effective model (with fallback to default)
     const effectiveModelId = modelId || defaults?.default_text2img_model_id || null;
@@ -134,7 +165,7 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
     const contentReservedHeight = controlsHeight + 16 + 16;
 
     // Check if can run
-    const canRun = prompt.trim() && effectiveModelId && !isModelDisabled && !isModelMissing;
+    const canRun = Boolean((prompt.trim() || hasBriefInput) && effectiveModelId && !isModelDisabled && !isModelMissing);
 
     const handleRun = useCallback(async () => {
         if (!canRun || !effectiveModelId) return;
@@ -144,76 +175,188 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
         setError(null);
 
         try {
-            // Call generation API
-            const response = await fetch('/api/generate/image', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model_id: effectiveModelId,
-                    mode: 'text2img',
-                    prompt: prompt.trim(),
-                    params: {
-                        ratio,
-                        resolution,
-                        count,
-                    },
-                }),
+            // Persist current params into node data so the runner can read them.
+            useGraphStore.getState().updateNodeData(id, {
+                prompt,
+                model_id: effectiveModelId,
+                ratio,
+                resolution,
+                count,
             });
 
-            const data = await response.json();
+            const { results: runResults } = await runGraph({ mode: 'RUN_NODE', startNodeId: id });
+            const nodeResult = runResults[id];
 
-            if (!data.success) {
-                throw new Error(data.error || 'Generation failed');
+            if (!nodeResult?.success) {
+                throw new Error(nodeResult?.error || 'Run failed');
             }
 
-            const jobId = data.data.job_id;
-
-            // Poll for completion
-            let attempts = 0;
-            const maxAttempts = 60; // 30 seconds max
-
-            while (attempts < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                const statusRes = await fetch(`/api/jobs/${jobId}`);
-                const statusData = await statusRes.json();
-
-                if (!statusData.success) {
-                    throw new Error('Failed to get job status');
-                }
-
-                const job = statusData.data;
-
-                if (job.status === 'done' && job.outputs) {
-                    // Convert outputs to results
-                    const newResults: ImageResult[] = job.outputs.thumbnails.map((url: string, i: number) => ({
-                        id: job.outputs.asset_ids[i] || `result-${Date.now()}-${i}`,
-                        url,
-                        seed: job.outputs.seeds?.[i],
-                    }));
-
-                    setResults(newResults);
-                    setState('generated');
-                    setStatus('done');
-                    return;
-                }
-
-                if (job.status === 'error') {
-                    throw new Error(job.error || 'Generation failed');
-                }
-
-                attempts++;
-            }
-
-            throw new Error('Generation timed out');
+            setState('generated');
+            setStatus('success');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Unknown error');
-            setStatus('error');
+            setStatus('fail');
         }
-    }, [canRun, effectiveModelId, prompt, ratio, resolution, count]);
+    }, [id, canRun, effectiveModelId, prompt, ratio, resolution, count]);
+
+    // Keep local results in sync with SnapshotStore history (Replace/Reset/Run).
+    useEffect(() => {
+        const nextResults: ImageResult[] = imageHistory.map((s, i) => ({
+            id: s.snapshot_id,
+            url: typeof s.payload === 'string' ? s.payload : String(s.payload),
+            seed: (s.payload as { seed?: number } | undefined)?.seed,
+        }));
+        setResults(nextResults);
+        setState(nextResults.length > 0 ? 'generated' : 'empty');
+    }, [imageHistory]);
+
+    // Keep local status in sync with graph node status (runner updates it).
+    useEffect(() => {
+        const nodeStatus = data.status;
+        if (nodeStatus === 'running') setStatus('running');
+        else if (nodeStatus === 'success') setStatus('success');
+        else if (nodeStatus === 'fail') setStatus('fail');
+        else setStatus('idle');
+    }, [data.status]);
+
+    useEffect(() => {
+        setError((data.error as string | undefined) || null);
+    }, [data.error]);
+
+    // PRD v2.1: Action Bar handlers
+    const { resetSnapshots, setActiveSnapshot } = useSnapshotStore();
+    const { removeNode, setNodes, nodes, toggleNodeLock, updateNodeData } = useGraphStore();
+
+    const cycleColor = useCallback(() => {
+        const colors = [undefined, '#FEF3C7', '#DBEAFE', '#DCFCE7', '#FCE7F3', '#E0E7FF'] as const;
+        const current = data.color as string | undefined;
+        const currentIndex = Math.max(0, colors.findIndex(c => c === current));
+        const next = colors[(currentIndex + 1) % colors.length];
+        updateNodeData(id, { color: next });
+    }, [id, data.color, updateNodeData]);
+
+    const handleAction = useCallback((actionId: ActionId) => {
+        switch (actionId) {
+            case 'run':
+                handleRun();
+                break;
+            case 'runFromHere':
+                // PRD v2.1: Run from here (cascade downstream)
+                (async () => {
+                    setError(null);
+                    try {
+                        useGraphStore.getState().updateNodeData(id, {
+                            prompt,
+                            model_id: effectiveModelId,
+                            ratio,
+                            resolution,
+                            count,
+                        });
+                        await runGraph({ mode: 'RUN_FROM_HERE', startNodeId: id });
+                    } catch (err) {
+                        setError(err instanceof Error ? err.message : 'Unknown error');
+                    }
+                })();
+                break;
+            case 'replace':
+                // Cycle through candidates by switching active snapshot (Replace creation)
+                if (imageHistory.length > 1) {
+                    const currentId = activeImageSnapshotId || imageHistory[0].snapshot_id;
+                    const currentIndex = Math.max(0, imageHistory.findIndex(s => s.snapshot_id === currentId));
+                    const nextIndex = (currentIndex + 1) % imageHistory.length;
+                    setActiveSnapshot(id, 'imageOut' as PortKey, imageHistory[nextIndex].snapshot_id);
+                }
+                break;
+            case 'reset':
+                resetSnapshots(id, 'imageOut' as PortKey);
+                setResults([]);
+                setState('empty');
+                setStatus('idle');
+                break;
+            case 'preview':
+                if (results.length > 0) {
+                    const activeId = activeImageSnapshotId || results[0]?.id;
+                    const idx = Math.max(0, results.findIndex(r => r.id === activeId));
+                    setLightboxIndex(idx);
+                    setShowLightbox(true);
+                }
+                break;
+            case 'duplicate':
+                // Duplicate node by copying and offsetting
+                const nodeToCopy = nodes.find(n => n.id === id);
+                if (nodeToCopy) {
+                    const newNode = {
+                        ...JSON.parse(JSON.stringify(nodeToCopy)),
+                        id: uuidv4(),
+                        position: {
+                            x: nodeToCopy.position.x + 50,
+                            y: nodeToCopy.position.y + 50,
+                        },
+                        selected: false,
+                    };
+                    setNodes([...nodes, newNode]);
+                }
+                break;
+            case 'delete':
+                removeNode(id);
+                break;
+            case 'lock':
+            case 'unlock':
+                toggleNodeLock(id);
+                break;
+            case 'rename':
+                {
+                    const currentName = (data.skillName as string | undefined) || 'Image Generator';
+                    const nextName = window.prompt('Rename node', currentName);
+                    if (nextName && nextName.trim()) {
+                        updateNodeData(id, { skillName: nextName.trim() });
+                    }
+                }
+                break;
+            case 'color':
+                cycleColor();
+                break;
+            default:
+                console.log('Action:', actionId);
+        }
+    }, [id, handleRun, imageHistory, activeImageSnapshotId, setActiveSnapshot, resetSnapshots, removeNode, nodes, setNodes, toggleNodeLock, data.skillName, updateNodeData, cycleColor, prompt, effectiveModelId, ratio, resolution, count, results]);
+
+    const handleLightboxPrev = useCallback(() => {
+        setLightboxIndex((i) => {
+            if (results.length === 0) return 0;
+            return (i - 1 + results.length) % results.length;
+        });
+    }, [results.length]);
+
+    const handleLightboxNext = useCallback(() => {
+        setLightboxIndex((i) => {
+            if (results.length === 0) return 0;
+            return (i + 1) % results.length;
+        });
+    }, [results.length]);
 
     return (
         <div className="group/card relative">
+            {/* PRD v2.1: Action Bar - appears when selected */}
+            <NodeToolbar isVisible={selected} position={Position.Top} offset={10}>
+                <ActionBar
+                    nodeId={id}
+                    nodeType="imageStudio"
+                    isLocked={data.locked ?? false}
+                    isRunning={status === 'running'}
+                    hasResults={results.length > 0}
+                    canRun={canRun}
+                    missingInputs={
+                        !effectiveModelId
+                            ? ['model']
+                            : (!prompt.trim() && !hasBriefInput)
+                                ? ['prompt/brief']
+                                : []
+                    }
+                    onAction={handleAction}
+                />
+            </NodeToolbar>
+
             {/* Left Handle (Target) - Full height hit area, visual button centered */}
             <div className="absolute -left-6 top-0 h-full w-6 z-10 group/handle flex items-center justify-center">
                 <Handle
@@ -256,6 +399,9 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                     transition-all duration-500 ease-in-out
                     ${selected ? 'ring-2 ring-gray-400 shadow-2xl' : 'shadow-lg border border-gray-200'}
                 `}
+                style={{
+                    backgroundColor: (data.color as string | undefined) || undefined,
+                }}
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 z-20">
@@ -265,11 +411,14 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                     </div>
                     {/* Model Badge */}
                     {currentModel && (
-                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs ${isModelDisabled ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
-                            }`}>
-                            {isModelDisabled && <AlertTriangle size={12} />}
-                            <Cpu size={12} />
-                            <span>{currentModel.display_name}</span>
+                        <div
+                            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs min-w-0 max-w-[220px] ${isModelDisabled ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
+                                }`}
+                            title={currentModel.display_name}
+                        >
+                            {isModelDisabled && <AlertTriangle size={12} className="shrink-0" />}
+                            <Cpu size={12} className="shrink-0" />
+                            <span className="min-w-0 truncate">{currentModel.display_name}</span>
                         </div>
                     )}
                 </div>
@@ -331,16 +480,19 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                     {/* Control Row */}
                     <div className="flex items-center gap-1.5 relative z-20">
                         {/* Model Picker */}
-                        <div className="relative shrink-0">
+                        <div className="relative min-w-0">
                             <button
                                 onClick={() => setShowDropdown(showDropdown === 'model' ? null : 'model')}
-                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${isModelDisabled ? 'bg-yellow-100 text-yellow-700' :
-                                        showDropdown === 'model' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'
+                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap min-w-0 ${isModelDisabled ? 'bg-yellow-100 text-yellow-700' :
+                                    showDropdown === 'model' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'
                                     }`}
+                                title={currentModel?.display_name || (effectiveModelId ? String(effectiveModelId) : undefined)}
                             >
-                                <Cpu size={12} />
-                                {currentModel?.display_name || 'Select model'}
-                                <ChevronDown size={12} className={`transition-transform duration-200 ${showDropdown === 'model' ? 'rotate-180' : ''}`} />
+                                <Cpu size={12} className="shrink-0" />
+                                <span className="min-w-0 truncate">
+                                    {currentModel?.display_name || 'Select model'}
+                                </span>
+                                <ChevronDown size={12} className={`shrink-0 transition-transform duration-200 ${showDropdown === 'model' ? 'rotate-180' : ''}`} />
                             </button>
                             {showDropdown === 'model' && (
                                 <div className="absolute bottom-full mb-2 left-0 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden flex flex-col py-1 animate-in fade-in zoom-in-95 duration-100 origin-bottom-left max-h-64 overflow-y-auto">
@@ -475,6 +627,57 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                     />
                 )}
             </div>
+
+            {/* Lightbox Preview */}
+            {showLightbox && results[lightboxIndex] && (
+                <div
+                    className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center"
+                    onClick={() => setShowLightbox(false)}
+                >
+                    {/* Close Button */}
+                    <button
+                        onClick={() => setShowLightbox(false)}
+                        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center"
+                    >
+                        <X size={20} />
+                    </button>
+
+                    {/* Navigation - Previous */}
+                    {results.length > 1 && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); handleLightboxPrev(); }}
+                            className="absolute left-4 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center"
+                        >
+                            <ChevronLeft size={24} />
+                        </button>
+                    )}
+
+                    {/* Image */}
+                    <img
+                        src={results[lightboxIndex].url}
+                        alt={`Preview ${lightboxIndex + 1}`}
+                        className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+
+                    {/* Navigation - Next */}
+                    {results.length > 1 && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); handleLightboxNext(); }}
+                            className="absolute right-4 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center"
+                        >
+                            <ChevronRight size={24} />
+                        </button>
+                    )}
+
+                    {/* Counter */}
+                    {results.length > 1 && (
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/50 rounded-full text-white text-sm">
+                            {lightboxIndex + 1} / {results.length}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

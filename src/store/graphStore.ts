@@ -101,6 +101,8 @@ function getNodeTypeForSkill(skillType: string): string {
     // Direct mappings for new v1.7 types
     if (skillType === 'imageStudio') return 'imageStudio';
     if (skillType === 'uploadImage') return 'uploadImage';
+    if (skillType === 'media') return 'media';
+    if (skillType === 'upscale') return 'upscale';
     if (skillType === 'textCard' || skillType === 'notes' || skillType === 'brief') return 'textCard';
     if (skillType.startsWith('group-') || ['style', 'refset', 'candidates', 'elements', 'blank'].includes(skillType)) return 'groupFrame';
 
@@ -219,7 +221,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         const nodeType = getNodeTypeForSkill(skillType);
 
         // v1.7 direct node types
-        if (nodeType === 'imageStudio' || nodeType === 'uploadImage' || nodeType === 'groupFrame') {
+        if (nodeType === 'imageStudio' || nodeType === 'uploadImage' || nodeType === 'groupFrame' || nodeType === 'media' || nodeType === 'upscale') {
             const newNode: SkillNode = {
                 id: uuidv4(),
                 type: nodeType,
@@ -227,7 +229,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
                 data: {
                     skillId: skillType,
                     skillName: nodeType === 'imageStudio' ? 'Image Studio' :
-                        nodeType === 'uploadImage' ? 'Upload Image' : 'Group',
+                        nodeType === 'uploadImage' ? 'Upload Image' :
+                            nodeType === 'media' ? 'Media' :
+                                nodeType === 'upscale' ? 'Upscale' : 'Group',
                     skillType: skillType,
                     params: {},
                     status: 'idle',
@@ -235,6 +239,8 @@ export const useGraphStore = create<GraphState>((set, get) => ({
                     // Type-specific data
                     ...(nodeType === 'imageStudio' && { state: 'empty', prompt: '', results: [] }),
                     ...(nodeType === 'uploadImage' && { imageUrl: '', caption: '' }),
+                    ...(nodeType === 'media' && { imageUrl: '' }),
+                    ...(nodeType === 'upscale' && { scale: 2 }),
                     ...(nodeType === 'groupFrame' && { groupType: mapSkillToGroupType(skillType) }),
                 },
             };

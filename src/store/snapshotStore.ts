@@ -3,9 +3,15 @@ import { v4 as uuidv4 } from 'uuid';
 
 /**
  * PRD v1.8: Output Snapshot Protocol
+ * PRD v2.1: Active Snapshot & Replace/Reset Semantics
  * 
  * Snapshots are immutable outputs from nodes (cards/groups).
  * Downstream nodes subscribe to snapshots and get notified when upstream produces new versions.
+ * 
+ * v2.1 additions:
+ * - activeByProducerPort: tracks which snapshot is "active" for each producer+port
+ * - setActiveSnapshot: marks a specific snapshot as the active output (for Replace)
+ * - resetSnapshots: clears all snapshots for a port (for Reset)
  */
 
 export type PortKey = 'imageOut' | 'contextOut' | 'briefOut' | 'styleToken' | 'refsetToken' | 'candidatesToken' | 'elementsToken';
@@ -34,6 +40,12 @@ interface SnapshotState {
     // Snapshots indexed by producer_id -> port_key -> snapshot
     snapshots: Record<string, Record<string, OutputSnapshot>>;
 
+    // PRD v2.1: Snapshot history for each producer+port (allows multiple versions)
+    snapshotHistory: Record<string, Record<string, OutputSnapshot[]>>;
+
+    // PRD v2.1: Active snapshot ID per producer+port (key: "producerId:portKey")
+    activeByProducerPort: Record<string, string>;
+
     // Subscriptions indexed by subscriber_id
     subscriptions: Record<string, Subscription[]>;
 
@@ -44,6 +56,12 @@ interface SnapshotState {
     createSnapshot: (producerId: string, portKey: PortKey, payload: unknown) => OutputSnapshot;
     getSnapshot: (producerId: string, portKey: PortKey) => OutputSnapshot | undefined;
     getLatestVersion: (producerId: string, portKey: PortKey) => number;
+
+    // PRD v2.1: Active snapshot management
+    setActiveSnapshot: (producerId: string, portKey: PortKey, snapshotId: string) => void;
+    getActiveSnapshot: (producerId: string, portKey: PortKey) => OutputSnapshot | undefined;
+    getSnapshotHistory: (producerId: string, portKey: PortKey) => OutputSnapshot[];
+    resetSnapshots: (producerId: string, portKey: PortKey) => void;
 
     // Subscription management
     subscribe: (subscriberId: string, producerId: string, portKey: PortKey) => string;
@@ -66,6 +84,8 @@ interface SnapshotState {
 
 export const useSnapshotStore = create<SnapshotState>((set, get) => ({
     snapshots: {},
+    snapshotHistory: {},
+    activeByProducerPort: {},
     subscriptions: {},
     staleStates: {},
 
@@ -80,15 +100,36 @@ export const useSnapshotStore = create<SnapshotState>((set, get) => ({
             created_at: Date.now(),
         };
 
-        set((state) => ({
-            snapshots: {
-                ...state.snapshots,
-                [producerId]: {
-                    ...state.snapshots[producerId],
-                    [portKey]: snapshot,
+        const activeKey = `${producerId}:${portKey}`;
+
+        set((state) => {
+            // Add to history
+            const producerHistory = state.snapshotHistory[producerId] || {};
+            const portHistory = producerHistory[portKey] || [];
+
+            return {
+                snapshots: {
+                    ...state.snapshots,
+                    [producerId]: {
+                        ...state.snapshots[producerId],
+                        [portKey]: snapshot,
+                    },
                 },
-            },
-        }));
+                // PRD v2.1: Store in history
+                snapshotHistory: {
+                    ...state.snapshotHistory,
+                    [producerId]: {
+                        ...producerHistory,
+                        [portKey]: [...portHistory, snapshot],
+                    },
+                },
+                // PRD v2.1: Auto-set as active (newly created snapshot is active by default)
+                activeByProducerPort: {
+                    ...state.activeByProducerPort,
+                    [activeKey]: snapshot.snapshot_id,
+                },
+            };
+        });
 
         // Trigger stale state update for all subscribers
         get().updateStaleStates();
@@ -102,6 +143,93 @@ export const useSnapshotStore = create<SnapshotState>((set, get) => ({
 
     getLatestVersion: (producerId, portKey) => {
         return get().snapshots[producerId]?.[portKey]?.version ?? 0;
+    },
+
+    // PRD v2.1: Set a specific snapshot as active (for Replace action)
+    setActiveSnapshot: (producerId, portKey, snapshotId) => {
+        const activeKey = `${producerId}:${portKey}`;
+        const history = get().snapshotHistory[producerId]?.[portKey] || [];
+        const snapshot = history.find(s => s.snapshot_id === snapshotId);
+
+        if (!snapshot) {
+            console.warn(`[PRD v2.1] setActiveSnapshot: snapshot ${snapshotId} not found for ${producerId}:${portKey}`);
+            return;
+        }
+
+        set((state) => ({
+            // Update current snapshot to the active one
+            snapshots: {
+                ...state.snapshots,
+                [producerId]: {
+                    ...state.snapshots[producerId],
+                    [portKey]: snapshot,
+                },
+            },
+            activeByProducerPort: {
+                ...state.activeByProducerPort,
+                [activeKey]: snapshotId,
+            },
+        }));
+
+        console.log(`[PRD v2.1] Set active snapshot: ${producerId}:${portKey} -> ${snapshotId}`);
+
+        // Trigger stale state update for all subscribers
+        get().updateStaleStates();
+    },
+
+    // PRD v2.1: Get the currently active snapshot
+    getActiveSnapshot: (producerId, portKey) => {
+        const activeKey = `${producerId}:${portKey}`;
+        const activeId = get().activeByProducerPort[activeKey];
+
+        if (!activeId) {
+            // Fallback to current snapshot
+            return get().snapshots[producerId]?.[portKey];
+        }
+
+        const history = get().snapshotHistory[producerId]?.[portKey] || [];
+        return history.find(s => s.snapshot_id === activeId) || get().snapshots[producerId]?.[portKey];
+    },
+
+    // PRD v2.1: Get snapshot history for a producer+port
+    getSnapshotHistory: (producerId, portKey) => {
+        return get().snapshotHistory[producerId]?.[portKey] || [];
+    },
+
+    // PRD v2.1: Reset/clear all snapshots for a port (for Reset action)
+    resetSnapshots: (producerId, portKey) => {
+        const activeKey = `${producerId}:${portKey}`;
+
+        set((state) => {
+            // Remove from snapshots
+            const producerSnapshots = { ...state.snapshots[producerId] };
+            delete producerSnapshots[portKey];
+
+            // Remove from history (or mark as archived - for now, we clear)
+            const producerHistory = { ...state.snapshotHistory[producerId] };
+            delete producerHistory[portKey];
+
+            // Remove active pointer
+            const newActive = { ...state.activeByProducerPort };
+            delete newActive[activeKey];
+
+            return {
+                snapshots: {
+                    ...state.snapshots,
+                    [producerId]: producerSnapshots,
+                },
+                snapshotHistory: {
+                    ...state.snapshotHistory,
+                    [producerId]: producerHistory,
+                },
+                activeByProducerPort: newActive,
+            };
+        });
+
+        console.log(`[PRD v2.1] Reset snapshots: ${producerId}:${portKey}`);
+
+        // Trigger stale state update - downstream nodes will become blocked
+        get().updateStaleStates();
     },
 
     subscribe: (subscriberId, producerId, portKey) => {
@@ -182,7 +310,10 @@ export const useSnapshotStore = create<SnapshotState>((set, get) => ({
                 return 'blocked';
             }
 
-            if (snapshot.version > sub.consumed_version) {
+            // PRD v2.1: Replace can switch active output to an older version.
+            // So we treat "stale" as "current active version differs from what was consumed",
+            // not strictly "newer than consumed".
+            if (snapshot.version !== sub.consumed_version) {
                 hasStale = true;
             }
         }
@@ -206,7 +337,7 @@ export const useSnapshotStore = create<SnapshotState>((set, get) => ({
     },
 
     clearSnapshots: () => {
-        set({ snapshots: {}, staleStates: {} });
+        set({ snapshots: {}, snapshotHistory: {}, activeByProducerPort: {}, staleStates: {} });
     },
 
     removeProducerSnapshots: (producerId) => {
@@ -345,4 +476,3 @@ export function syncSubscriptionsFromEdges(edges: EdgeData[]): void {
 
     console.log(`[PRD v2.0] Synced ${edges.length} edges to subscriptions`);
 }
-

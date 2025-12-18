@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, memo, useCallback } from 'react';
-import { Handle, Position, NodeResizer } from '@xyflow/react';
+import { Handle, Position, NodeResizer, NodeToolbar } from '@xyflow/react';
 import { useGraphStore } from '@/store/graphStore';
 import {
     Folder,
@@ -19,6 +19,9 @@ import {
     AlertCircle,
 } from 'lucide-react';
 import { useSnapshotStore, type StaleState } from '@/store/snapshotStore';
+import { ActionBar, type ActionId } from '@/components/canvas/ActionBar';
+import { v4 as uuidv4 } from 'uuid';
+import { runGraph } from '@/lib/engine/runner';
 
 /**
  * PRD v1.8: Group Frame Types
@@ -36,6 +39,12 @@ interface GroupFrameData {
     autoRun?: boolean;
     groupPrompt?: string;
     magnetic?: boolean;
+    // GraphStore common fields (for ActionBar)
+    skillName?: string;
+    locked?: boolean;
+    status?: 'idle' | 'running' | 'success' | 'fail';
+    error?: string;
+    color?: string;
     // Run Group specific
     runMode?: 'all' | 'dirtyOnly' | 'fromHere';
 }
@@ -91,7 +100,7 @@ const GROUP_CONFIG: Record<GroupType, {
 };
 
 function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
-    const { removeNode } = useGraphStore();
+    const { nodes, setNodes, removeNode, toggleNodeLock, updateNodeData } = useGraphStore();
     const [groupType] = useState<GroupType>(data.groupType || 'blank');
     const [autoRun, setAutoRun] = useState(data.autoRun || false);
     const [magnetic, setMagnetic] = useState(data.magnetic ?? true);
@@ -103,9 +112,14 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
 
     const handleRun = useCallback(async () => {
         setIsRunning(true);
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        try {
+            await runGraph({ mode: 'RUN_GROUP', startNodeId: id });
+        } finally {
+            // Runner updates node statuses; we keep this spinner local to the group header.
+            await new Promise(resolve => setTimeout(resolve, 150));
+        }
         setIsRunning(false);
-    }, []);
+    }, [id]);
 
     const handleDelete = useCallback((e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent selection
@@ -114,8 +128,77 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
         }
     }, [id, removeNode]);
 
+    const cycleColor = useCallback(() => {
+        const colors = [undefined, '#FEF3C7', '#DBEAFE', '#DCFCE7', '#FCE7F3', '#E0E7FF'] as const;
+        const current = data.color as string | undefined;
+        const currentIndex = Math.max(0, colors.findIndex(c => c === current));
+        const next = colors[(currentIndex + 1) % colors.length];
+        updateNodeData(id, { color: next });
+    }, [id, data.color, updateNodeData]);
+
+    const handleAction = useCallback((actionId: ActionId) => {
+        switch (actionId) {
+            case 'run':
+                handleRun();
+                break;
+            case 'runFromHere':
+                (async () => {
+                    await runGraph({ mode: 'RUN_GROUP', startNodeId: id });
+                    await runGraph({ mode: 'RUN_FROM_HERE', startNodeId: id });
+                })();
+                break;
+            case 'duplicate': {
+                const nodeToCopy = nodes.find(n => n.id === id);
+                if (!nodeToCopy) return;
+                const newNode = {
+                    ...JSON.parse(JSON.stringify(nodeToCopy)),
+                    id: uuidv4(),
+                    position: {
+                        x: nodeToCopy.position.x + 50,
+                        y: nodeToCopy.position.y + 50,
+                    },
+                    parentId: undefined,
+                    selected: false,
+                };
+                setNodes([...nodes, newNode]);
+                break;
+            }
+            case 'delete':
+                removeNode(id);
+                break;
+            case 'lock':
+            case 'unlock':
+                toggleNodeLock(id);
+                break;
+            case 'rename': {
+                const currentName = (data.label as string | undefined) || (data.skillName as string | undefined) || config.label;
+                const nextName = window.prompt('Rename group', currentName);
+                if (nextName && nextName.trim()) {
+                    updateNodeData(id, { label: nextName.trim(), skillName: nextName.trim() });
+                }
+                break;
+            }
+            case 'color':
+                cycleColor();
+                break;
+            default:
+                break;
+        }
+    }, [handleRun, id, nodes, setNodes, removeNode, toggleNodeLock, data.label, data.skillName, config.label, updateNodeData, cycleColor]);
+
     return (
         <div className="group/card relative w-full h-full">
+            {/* PRD v2.1: Action Bar */}
+            <NodeToolbar isVisible={selected} position={Position.Top} offset={10}>
+                <ActionBar
+                    nodeId={id}
+                    nodeType="groupFrame"
+                    isLocked={!!data.locked}
+                    isRunning={isRunning}
+                    hasResults={false}
+                    onAction={handleAction}
+                />
+            </NodeToolbar>
             {/* Resizer */}
             <NodeResizer
                 minWidth={200}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Search, X, Type, FileText, Upload, Sparkles, LayoutGrid, Scissors, Square } from 'lucide-react';
+import { Search, X, Type, FileText, Upload, Sparkles, LayoutGrid, Scissors, Square, Image as ImageIcon, ArrowUp } from 'lucide-react';
 
 // v1.7 Node Types for Command Palette
 const NODE_TYPES = [
@@ -9,6 +9,8 @@ const NODE_TYPES = [
     { type: 'brief', name: 'Text Brief', icon: FileText, color: '#3B82F6', shortcut: 'B' },
     { type: 'uploadImage', name: 'Upload Image', icon: Upload, color: '#10B981', shortcut: 'U' },
     { type: 'imageStudio', name: 'Image Studio', icon: Sparkles, color: '#8B5CF6', shortcut: 'I' },
+    { type: 'media', name: 'Media', icon: ImageIcon, color: '#F59E0B', shortcut: 'M' },
+    { type: 'upscale', name: 'Upscale', icon: ArrowUp, color: '#0EA5E9', shortcut: '' },
     { type: 'style', name: 'Style Group', icon: LayoutGrid, color: '#8B5CF6', shortcut: '' },
     { type: 'refset', name: 'RefSet Group', icon: LayoutGrid, color: '#10B981', shortcut: '' },
     { type: 'candidates', name: 'Candidates Group', icon: LayoutGrid, color: '#EF4444', shortcut: '' },
@@ -31,10 +33,12 @@ export default function CommandPalette({ isOpen, onClose, onAddNode }: CommandPa
         node.name.toLowerCase().includes(search.toLowerCase())
     );
 
-    // Reset selection when search changes
-    useEffect(() => {
+    const handleSelect = useCallback((nodeType: string) => {
+        onAddNode(nodeType);
+        setSearch('');
         setSelectedIndex(0);
-    }, [search]);
+        onClose();
+    }, [onAddNode, onClose]);
 
     // Keyboard navigation
     useEffect(() => {
@@ -60,12 +64,6 @@ export default function CommandPalette({ isOpen, onClose, onAddNode }: CommandPa
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, onClose, filteredNodes, selectedIndex]);
 
-    const handleSelect = useCallback((nodeType: string) => {
-        onAddNode(nodeType);
-        setSearch('');
-        onClose();
-    }, [onAddNode, onClose]);
-
     if (!isOpen) return null;
 
     return (
@@ -85,7 +83,10 @@ export default function CommandPalette({ isOpen, onClose, onAddNode }: CommandPa
                         <input
                             type="text"
                             value={search}
-                            onChange={(e) => setSearch(e.target.value)}
+                            onChange={(e) => {
+                                setSearch(e.target.value);
+                                setSelectedIndex(0);
+                            }}
                             placeholder="Add a card..."
                             className="flex-1 bg-transparent text-[var(--text-primary)] placeholder-[var(--text-tertiary)] outline-none text-sm"
                             autoFocus
@@ -160,4 +161,3 @@ export default function CommandPalette({ isOpen, onClose, onAddNode }: CommandPa
         </>
     );
 }
-

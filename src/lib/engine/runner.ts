@@ -1,15 +1,21 @@
 /**
- * PRD v2.0: DAG Runner
- * 
+ * PRD v2.1: DAG Runner (runGraph)
+ *
  * Executes nodes in topological order with support for:
- * - Run All: Execute all nodes from sources to sinks
- * - Run From Here: Execute from a specific node downstream
- * - Run Node: Execute a single node
+ * - RUN_NODE: Execute a single node
+ * - RUN_FROM_HERE: Execute a node + all reachable downstream nodes
+ * - RUN_GROUP: Execute only the subgraph inside a GroupFrame
+ * - RUN_ALL: Execute all nodes from sources to sinks
+ *
+ * Integrations:
+ * - SnapshotStore (active snapshot semantics + stale propagation)
+ * - RecipeStore (run records + replay)
  */
 
 import { useGraphStore, SkillNode, SkillEdge } from '@/store/graphStore';
 import { useSnapshotStore, PortKey } from '@/store/snapshotStore';
-import { useRecipeStore } from '@/store/recipeStore';
+import { createRecipeFromDagRun, type RunMode, type SnapshotRef, useRecipeStore } from '@/store/recipeStore';
+import { useSettingsStore } from '@/store/settingsStore';
 
 // =============================================================================
 // Topological Sort
@@ -115,6 +121,38 @@ export interface ExecutionResult {
     duration?: number;
 }
 
+function compileTextCardOutput(node: SkillNode): string {
+    const role = (node.data.role as string | undefined) || 'notes';
+    const content = (node.data.content as string | undefined) || '';
+
+    if (role !== 'brief') return content;
+
+    const title = (node.data.title as string | undefined) || '';
+    const subtitle = (node.data.subtitle as string | undefined) || '';
+    const info = (node.data.info as string | undefined) || '';
+    const size = (node.data.size as string | undefined) || '';
+    const tone = node.data.tone as number | undefined;
+    const constraints = Array.isArray(node.data.constraints) ? (node.data.constraints as unknown[]).filter(Boolean).map(String) : [];
+
+    const lines: string[] = [];
+    if (title.trim()) lines.push(`# ${title.trim()}`);
+    if (subtitle.trim()) lines.push(`## ${subtitle.trim()}`);
+    if (size.trim()) lines.push(`- Size: ${size.trim()}`);
+    if (typeof tone === 'number') lines.push(`- Tone: ${tone}`);
+    if (info.trim()) {
+        lines.push('');
+        lines.push(info.trim());
+    }
+    if (constraints.length > 0) {
+        lines.push('');
+        lines.push('### Constraints');
+        for (const c of constraints) {
+            if (c.trim()) lines.push(`- ${c.trim()}`);
+        }
+    }
+    return lines.join('\n');
+}
+
 async function executeNode(context: ExecutionContext): Promise<ExecutionResult> {
     const { node } = context;
     const startTime = Date.now();
@@ -125,7 +163,7 @@ async function executeNode(context: ExecutionContext): Promise<ExecutionResult> 
         switch (nodeType) {
             case 'textCard': {
                 // TextCard produces brief output
-                const content = node.data.content as string || '';
+                const content = compileTextCardOutput(node);
                 return {
                     success: true,
                     outputs: {
@@ -152,35 +190,47 @@ async function executeNode(context: ExecutionContext): Promise<ExecutionResult> 
             }
 
             case 'imageStudio': {
-                // ImageStudio needs to call the generation API
-                const prompt = node.data.prompt as string || '';
-                const model = node.data.model as string || 'flux-schnell';
-                const ratio = node.data.ratio as string || '1:1';
-                const count = node.data.count as number || 1;
+                // ImageStudio needs to call the unified generation API (PRD v1.9)
+                const settings = useSettingsStore.getState();
+                const defaults = settings.defaults;
+
+                const prompt = (node.data.prompt as string | undefined) || '';
+                const cardModelId =
+                    (node.data.model_id as string | undefined)
+                    || (node.data.model as string | undefined)
+                    || null;
+
+                // Fallback is important if settings haven't finished loading yet.
+                const effectiveModelId =
+                    cardModelId
+                    || defaults?.default_text2img_model_id
+                    || 'mock:default';
+
+                const ratio = (node.data.ratio as string | undefined) || defaults?.default_ratio || '1:1';
+                const resolution = (node.data.resolution as string | undefined) || defaults?.default_resolution || '1K';
+                const count = (node.data.count as number | undefined) || defaults?.default_count || 1;
 
                 // Get inputs from context
-                const briefInput = context.inputs['briefIn'] as string;
-                const compiledPrompt = briefInput || prompt;
+                const briefInput = context.inputs['briefIn'] as string | undefined;
+                const compiledPrompt = (briefInput || prompt).trim();
 
                 if (!compiledPrompt) {
                     return {
                         success: false,
-                        error: 'No prompt or brief input provided',
+                        error: 'Missing prompt (or connect a Brief)',
                         duration: Date.now() - startTime,
                     };
                 }
 
-                // Call generation API
+                // Call generation API (async job)
                 const response = await fetch('/api/generate/image', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        model_id: effectiveModelId,
+                        mode: 'text2img',
                         prompt: compiledPrompt,
-                        model,
-                        ratio,
-                        count,
-                        negative: node.data.negative as string,
-                        seed: node.data.seed as number,
+                        params: { ratio, resolution, count },
                     }),
                 });
 
@@ -194,41 +244,64 @@ async function executeNode(context: ExecutionContext): Promise<ExecutionResult> 
                     };
                 }
 
-                // For async jobs, we need to poll
-                if (result.data?.job_id) {
-                    const jobResult = await pollJobCompletion(result.data.job_id);
-                    if (!jobResult.success) {
-                        return {
-                            success: false,
-                            error: jobResult.error,
-                            duration: Date.now() - startTime,
-                        };
-                    }
-
+                const jobId = result.data?.job_id as string | undefined;
+                if (!jobId) {
                     return {
-                        success: true,
-                        outputs: {
-                            imageOut: jobResult.images?.[0],
-                            contextOut: {
-                                images: jobResult.images,
-                                prompt: compiledPrompt,
-                                params: { model, ratio },
-                            },
-                        } as Record<PortKey, unknown>,
+                        success: false,
+                        error: 'No job_id returned from generator',
                         duration: Date.now() - startTime,
                     };
                 }
 
-                // Sync result
+                const jobResult = await pollJobCompletion(jobId);
+                if (!jobResult.success) {
+                    return {
+                        success: false,
+                        error: jobResult.error,
+                        duration: Date.now() - startTime,
+                    };
+                }
+
+                const thumbnails = jobResult.thumbnails || [];
+
                 return {
                     success: true,
                     outputs: {
-                        imageOut: result.data?.images?.[0],
+                        imageOut: thumbnails[0],
                         contextOut: {
-                            images: result.data?.images,
+                            images: thumbnails,
+                            asset_ids: jobResult.assetIds,
+                            seeds: jobResult.seeds,
                             prompt: compiledPrompt,
-                            params: { model, ratio },
+                            params: { model_id: effectiveModelId, ratio, resolution, count },
+                            source: 'studio',
+                            nodeId: node.id,
+                            timestamp: Date.now(),
                         },
+                    } as Record<PortKey, unknown>,
+                    duration: Date.now() - startTime,
+                };
+            }
+
+            case 'upscale': {
+                const scale = (node.data.scale as number | undefined) ?? 2;
+                const input = context.inputs['imageIn'];
+                const imageUrl = typeof input === 'string' ? input : '';
+
+                if (!imageUrl) {
+                    return {
+                        success: false,
+                        error: 'Missing image input',
+                        duration: Date.now() - startTime,
+                    };
+                }
+
+                const out = await upscaleImageUrl(imageUrl, scale);
+
+                return {
+                    success: true,
+                    outputs: {
+                        imageOut: out,
                     } as Record<PortKey, unknown>,
                     duration: Date.now() - startTime,
                 };
@@ -273,7 +346,7 @@ async function pollJobCompletion(
     jobId: string,
     maxAttempts = 60,
     intervalMs = 2000
-): Promise<{ success: boolean; images?: string[]; error?: string }> {
+): Promise<{ success: boolean; thumbnails?: string[]; assetIds?: string[]; seeds?: number[]; error?: string }> {
     for (let i = 0; i < maxAttempts; i++) {
         await new Promise(resolve => setTimeout(resolve, intervalMs));
 
@@ -286,15 +359,20 @@ async function pollJobCompletion(
 
         const status = result.data?.status;
 
-        if (status === 'completed') {
-            return { success: true, images: result.data?.result?.images };
+        if (status === 'done') {
+            return {
+                success: true,
+                thumbnails: result.data?.outputs?.thumbnails,
+                assetIds: result.data?.outputs?.asset_ids,
+                seeds: result.data?.outputs?.seeds,
+            };
         }
 
-        if (status === 'failed') {
+        if (status === 'error') {
             return { success: false, error: result.data?.error || 'Job failed' };
         }
 
-        // Continue polling for 'pending' or 'running'
+        // Continue polling for 'queued' or 'running'
     }
 
     return { success: false, error: 'Job timed out' };
@@ -310,171 +388,291 @@ export interface RunOptions {
     onComplete?: () => void;
 }
 
-/**
- * Run All: Execute all nodes in topological order
- */
-export async function runAll(options: RunOptions = {}): Promise<void> {
-    const { nodes, edges, updateNodeStatus } = useGraphStore.getState();
-    const snapshotStore = useSnapshotStore.getState();
+const ALL_PORT_KEYS: PortKey[] = [
+    'imageOut',
+    'contextOut',
+    'briefOut',
+    'styleToken',
+    'refsetToken',
+    'candidatesToken',
+    'elementsToken',
+];
 
-    const order = topologicalSort(nodes, edges);
-
-    for (const nodeId of order) {
-        const node = nodes.find(n => n.id === nodeId);
-        if (!node) continue;
-
-        // Skip GroupFrames for now (they need special handling)
-        if (node.type === 'groupFrame') continue;
-
-        options.onNodeStart?.(nodeId);
-        updateNodeStatus(nodeId, 'running');
-
-        // Gather inputs from subscriptions
-        const subs = snapshotStore.getSubscriptions(nodeId);
-        const inputs: Record<string, unknown> = {};
-        for (const sub of subs) {
-            const snapshot = snapshotStore.getSnapshot(sub.producer_id, sub.port_key);
-            if (snapshot) {
-                // Map port_key to input handle
-                const inputHandle = sub.port_key.replace('Out', 'In').replace('Token', 'In');
-                inputs[inputHandle] = snapshot.payload;
-            }
-        }
-
-        const result = await executeNode({ nodeId, node, inputs });
-
-        if (result.success) {
-            updateNodeStatus(nodeId, 'success');
-
-            // Create snapshots for outputs
-            if (result.outputs) {
-                for (const [portKey, payload] of Object.entries(result.outputs)) {
-                    snapshotStore.createSnapshot(nodeId, portKey as PortKey, payload);
-                }
-            }
-
-            // Mark consumed
-            for (const sub of subs) {
-                const snapshot = snapshotStore.getSnapshot(sub.producer_id, sub.port_key);
-                if (snapshot) {
-                    snapshotStore.markConsumed(nodeId, sub.producer_id, sub.port_key, snapshot.version);
-                }
-            }
-        } else {
-            updateNodeStatus(nodeId, 'fail', undefined, result.error);
-        }
-
-        options.onNodeComplete?.(nodeId, result);
-    }
-
-    options.onComplete?.();
+function portKeyToInputHandle(portKey: PortKey): string {
+    return portKey.replace('Out', 'In').replace('Token', 'In');
 }
 
-/**
- * Run From Here: Execute from a specific node downstream
- */
-export async function runFromHere(startNodeId: string, options: RunOptions = {}): Promise<void> {
-    const { nodes, edges, updateNodeStatus } = useGraphStore.getState();
-    const snapshotStore = useSnapshotStore.getState();
-
-    const downstream = getDownstreamNodes(startNodeId, nodes, edges);
-
-    for (const nodeId of downstream) {
-        const node = nodes.find(n => n.id === nodeId);
-        if (!node) continue;
-
-        if (node.type === 'groupFrame') continue;
-
-        options.onNodeStart?.(nodeId);
-        updateNodeStatus(nodeId, 'running');
-
-        const subs = snapshotStore.getSubscriptions(nodeId);
-        const inputs: Record<string, unknown> = {};
-        for (const sub of subs) {
-            const snapshot = snapshotStore.getSnapshot(sub.producer_id, sub.port_key);
-            if (snapshot) {
-                const inputHandle = sub.port_key.replace('Out', 'In').replace('Token', 'In');
-                inputs[inputHandle] = snapshot.payload;
-            }
-        }
-
-        const result = await executeNode({ nodeId, node, inputs });
-
-        if (result.success) {
-            updateNodeStatus(nodeId, 'success');
-
-            if (result.outputs) {
-                for (const [portKey, payload] of Object.entries(result.outputs)) {
-                    snapshotStore.createSnapshot(nodeId, portKey as PortKey, payload);
-                }
-            }
-
-            for (const sub of subs) {
-                const snapshot = snapshotStore.getSnapshot(sub.producer_id, sub.port_key);
-                if (snapshot) {
-                    snapshotStore.markConsumed(nodeId, sub.producer_id, sub.port_key, snapshot.version);
-                }
-            }
-        } else {
-            updateNodeStatus(nodeId, 'fail', undefined, result.error);
-        }
-
-        options.onNodeComplete?.(nodeId, result);
-    }
-
-    options.onComplete?.();
+function snapshotToRef(snapshot: { snapshot_id: string; producer_id: string; port_key: PortKey; version: number }): SnapshotRef {
+    return {
+        snapshotId: snapshot.snapshot_id,
+        producerId: snapshot.producer_id,
+        portKey: snapshot.port_key,
+        version: snapshot.version,
+    };
 }
 
-/**
- * Run Node: Execute a single node
- */
-export async function runNode(nodeId: string, options: RunOptions = {}): Promise<ExecutionResult> {
-    const { nodes, updateNodeStatus } = useGraphStore.getState();
-    const snapshotStore = useSnapshotStore.getState();
+function getRunTargets(params: { mode: RunMode; startNodeId?: string; groupId?: string }): string[] {
+    const { mode, startNodeId, groupId } = params;
+    const { nodes, edges, getNodesInGroup } = useGraphStore.getState();
 
-    const node = nodes.find(n => n.id === nodeId);
-    if (!node) {
-        return { success: false, error: 'Node not found' };
+    if (mode === 'RUN_ALL') {
+        const order = topologicalSort(nodes, edges);
+        const nodeById = new Map(nodes.map(n => [n.id, n]));
+        return order.filter(id => nodeById.get(id)?.type !== 'groupFrame');
     }
 
-    options.onNodeStart?.(nodeId);
-    updateNodeStatus(nodeId, 'running');
+    if (mode === 'RUN_NODE') {
+        if (!startNodeId) return [];
+        const node = nodes.find(n => n.id === startNodeId);
+        if (!node || node.type === 'groupFrame') return [];
+        return [startNodeId];
+    }
 
+    if (mode === 'RUN_FROM_HERE') {
+        if (!startNodeId) return [];
+        const order = getDownstreamNodes(startNodeId, nodes, edges);
+        const nodeById = new Map(nodes.map(n => [n.id, n]));
+        return order.filter(id => nodeById.get(id)?.type !== 'groupFrame');
+    }
+
+    // RUN_GROUP
+    const effectiveGroupId = groupId || startNodeId;
+    if (!effectiveGroupId) return [];
+
+    const groupNodes = getNodesInGroup(effectiveGroupId);
+    if (groupNodes.length === 0) return [];
+
+    const groupNodeIds = new Set(groupNodes.map(n => n.id));
+    const groupEdges = edges.filter(e => groupNodeIds.has(e.source) && groupNodeIds.has(e.target));
+
+    return topologicalSort(groupNodes, groupEdges);
+}
+
+function collectInputs(nodeId: string) {
+    const snapshotStore = useSnapshotStore.getState();
     const subs = snapshotStore.getSubscriptions(nodeId);
+
     const inputs: Record<string, unknown> = {};
+    const inputRefs: SnapshotRef[] = [];
+    const missingUpstream: string[] = [];
+
     for (const sub of subs) {
         const snapshot = snapshotStore.getSnapshot(sub.producer_id, sub.port_key);
-        if (snapshot) {
-            const inputHandle = sub.port_key.replace('Out', 'In').replace('Token', 'In');
-            inputs[inputHandle] = snapshot.payload;
+        if (!snapshot) {
+            missingUpstream.push(sub.port_key);
+            continue;
+        }
+
+        inputs[portKeyToInputHandle(sub.port_key)] = snapshot.payload;
+        inputRefs.push(snapshotToRef(snapshot));
+    }
+
+    return { inputs, inputRefs, missingUpstream, subs };
+}
+
+function validateRunnable(node: SkillNode, inputs: Record<string, unknown>, missingUpstream: string[]): { ok: boolean; missing: string[] } {
+    // If a connected upstream hasn't produced output yet, treat as missing by default.
+    // Node-specific rules can override this (e.g. ImageStudio can run with local prompt).
+    if (missingUpstream.length > 0 && node.type !== 'imageStudio') {
+        return { ok: false, missing: missingUpstream };
+    }
+
+    if (node.type === 'imageStudio') {
+        const prompt = (node.data.prompt as string | undefined)?.trim() || '';
+        const brief = (inputs['briefIn'] as string | undefined)?.trim() || '';
+
+        const missing: string[] = [];
+        if (!prompt && !brief) missing.push('prompt/brief');
+
+        const settings = useSettingsStore.getState();
+        const defaults = settings.defaults;
+        const cardModelId =
+            (node.data.model_id as string | undefined)
+            || (node.data.model as string | undefined)
+            || null;
+
+        const effectiveModelId =
+            cardModelId
+            || defaults?.default_text2img_model_id
+            || 'mock:default';
+
+        if (!effectiveModelId) missing.push('model');
+
+        return { ok: missing.length === 0, missing };
+    }
+
+    if (node.type === 'upscale') {
+        const img = inputs['imageIn'];
+        if (typeof img !== 'string' || !img.trim()) {
+            return { ok: false, missing: ['image'] };
         }
     }
 
-    const result = await executeNode({ nodeId, node, inputs });
+    return { ok: true, missing: [] };
+}
 
-    if (result.success) {
-        updateNodeStatus(nodeId, 'success');
+export interface RunGraphParams {
+    mode: RunMode;
+    startNodeId?: string;
+    groupId?: string;
+}
+
+export interface RunGraphResult {
+    recipeId: string | null;
+    results: Record<string, ExecutionResult>;
+}
+
+/**
+ * PRD v2.1: Unified runner entrypoint.
+ */
+export async function runGraph(params: RunGraphParams, options: RunOptions = {}): Promise<RunGraphResult> {
+    const { mode, startNodeId } = params;
+    const graph = useGraphStore.getState();
+    const snapshotStore = useSnapshotStore.getState();
+    const recipeStore = useRecipeStore.getState();
+
+    const targetNodeIds = getRunTargets(params);
+    if (targetNodeIds.length === 0) {
+        return { recipeId: null, results: {} };
+    }
+
+    const runStartNodeId = startNodeId || targetNodeIds[0];
+    const recipeId = createRecipeFromDagRun(mode, runStartNodeId, targetNodeIds);
+
+    recipeStore.updateRecipeStatus(recipeId, 'running');
+    const runStartAt = Date.now();
+
+    const resultsByNodeId: Record<string, ExecutionResult> = {};
+
+    for (const nodeId of targetNodeIds) {
+        const node = graph.nodes.find(n => n.id === nodeId);
+        if (!node) continue;
+
+        // GroupFrames are containers; runGroup runs their children, not the group node itself.
+        if (node.type === 'groupFrame') continue;
+
+        // Locked nodes are treated as frozen outputs.
+        if (node.data.locked) {
+            const { inputs, inputRefs } = collectInputs(nodeId);
+            const activeOutputs: SnapshotRef[] = [];
+            for (const portKey of ALL_PORT_KEYS) {
+                const snap = snapshotStore.getActiveSnapshot(nodeId, portKey);
+                if (snap) activeOutputs.push(snapshotToRef(snap));
+            }
+            recipeStore.updateNodeIoMap(recipeId, nodeId, { inputs: inputRefs, outputs: activeOutputs });
+
+            const skipped: ExecutionResult = { success: true, outputs: {}, duration: 0 };
+            resultsByNodeId[nodeId] = skipped;
+            options.onNodeComplete?.(nodeId, skipped);
+            continue;
+        }
+
+        options.onNodeStart?.(nodeId);
+        graph.updateNodeStatus(nodeId, 'running');
+
+        const { inputs, inputRefs, missingUpstream, subs } = collectInputs(nodeId);
+        const validation = validateRunnable(node, inputs, missingUpstream);
+        if (!validation.ok) {
+            const error = `Missing inputs: ${validation.missing.join(', ')}`;
+            const blocked: ExecutionResult = { success: false, error, duration: 0 };
+            resultsByNodeId[nodeId] = blocked;
+
+            graph.updateNodeStatus(nodeId, 'fail', undefined, error);
+            recipeStore.updateNodeIoMap(recipeId, nodeId, { inputs: inputRefs, outputs: [] });
+            recipeStore.updateRecipeStatus(recipeId, 'error', Date.now() - runStartAt, error);
+            options.onNodeComplete?.(nodeId, blocked);
+            break;
+        }
+
+        const result = await executeNode({ nodeId, node, inputs });
+        resultsByNodeId[nodeId] = result;
+
+        if (!result.success) {
+            graph.updateNodeStatus(nodeId, 'fail', undefined, result.error);
+            recipeStore.updateNodeIoMap(recipeId, nodeId, { inputs: inputRefs, outputs: [] });
+            recipeStore.updateRecipeStatus(recipeId, 'error', Date.now() - runStartAt, result.error);
+            options.onNodeComplete?.(nodeId, result);
+            break;
+        }
+
+        graph.updateNodeStatus(nodeId, 'success');
+
+        // Write outputs to SnapshotStore.
+        // For ImageStudio we create one snapshot per candidate for Replace semantics.
+        const activeOutputs: SnapshotRef[] = [];
 
         if (result.outputs) {
-            for (const [portKey, payload] of Object.entries(result.outputs)) {
-                snapshotStore.createSnapshot(nodeId, portKey as PortKey, payload);
+            if (node.type === 'imageStudio') {
+                const contextOut = result.outputs.contextOut as { images?: unknown[] } | undefined;
+                const images = Array.isArray(contextOut?.images) ? (contextOut?.images as unknown[]) : [];
+
+                if (images.length > 0) {
+                    const created = images
+                        .map((payload) => snapshotStore.createSnapshot(nodeId, 'imageOut', payload))
+                        .filter(Boolean);
+
+                    // Default active = first candidate
+                    if (created.length > 0) {
+                        snapshotStore.setActiveSnapshot(nodeId, 'imageOut', created[0].snapshot_id);
+                        const activeImage = snapshotStore.getActiveSnapshot(nodeId, 'imageOut');
+                        if (activeImage) activeOutputs.push(snapshotToRef(activeImage));
+                    }
+                } else if (result.outputs.imageOut !== undefined) {
+                    const snap = snapshotStore.createSnapshot(nodeId, 'imageOut', result.outputs.imageOut);
+                    activeOutputs.push(snapshotToRef(snap));
+                }
+
+                if (result.outputs.contextOut !== undefined) {
+                    const snap = snapshotStore.createSnapshot(nodeId, 'contextOut', result.outputs.contextOut);
+                    activeOutputs.push(snapshotToRef(snap));
+                }
+            } else {
+                for (const [portKey, payload] of Object.entries(result.outputs)) {
+                    const snap = snapshotStore.createSnapshot(nodeId, portKey as PortKey, payload);
+                    activeOutputs.push(snapshotToRef(snap));
+                }
             }
         }
 
+        // Mark consumed (input → subscriber) to clear stale state.
         for (const sub of subs) {
             const snapshot = snapshotStore.getSnapshot(sub.producer_id, sub.port_key);
             if (snapshot) {
                 snapshotStore.markConsumed(nodeId, sub.producer_id, sub.port_key, snapshot.version);
             }
         }
-    } else {
-        updateNodeStatus(nodeId, 'fail', undefined, result.error);
+
+        recipeStore.updateNodeIoMap(recipeId, nodeId, { inputs: inputRefs, outputs: activeOutputs });
+        options.onNodeComplete?.(nodeId, result);
     }
 
-    options.onNodeComplete?.(nodeId, result);
-    options.onComplete?.();
+    const finalRecipe = recipeStore.getRecipeById(recipeId);
+    if (finalRecipe?.status === 'running') {
+        recipeStore.updateRecipeStatus(recipeId, 'success', Date.now() - runStartAt);
+    }
 
-    return result;
+    options.onComplete?.();
+    return { recipeId, results: resultsByNodeId };
+}
+
+/**
+ * Backwards-compatible wrappers.
+ */
+export async function runAll(options: RunOptions = {}): Promise<void> {
+    await runGraph({ mode: 'RUN_ALL' }, options);
+}
+
+export async function runFromHere(startNodeId: string, options: RunOptions = {}): Promise<void> {
+    await runGraph({ mode: 'RUN_FROM_HERE', startNodeId }, options);
+}
+
+export async function runGroup(groupId: string, options: RunOptions = {}): Promise<void> {
+    await runGraph({ mode: 'RUN_GROUP', startNodeId: groupId }, options);
+}
+
+export async function runNode(nodeId: string, options: RunOptions = {}): Promise<ExecutionResult> {
+    const result = await runGraph({ mode: 'RUN_NODE', startNodeId: nodeId }, options);
+    return result.results[nodeId] || { success: false, error: 'Node not executed' };
 }
 
 /**
@@ -491,4 +689,59 @@ export function isNodeStale(nodeId: string): boolean {
 export function isNodeBlocked(nodeId: string): boolean {
     const snapshotStore = useSnapshotStore.getState();
     return snapshotStore.getStaleState(nodeId) === 'blocked';
+}
+
+// =============================================================================
+// Client-side image helpers (Upscale)
+// =============================================================================
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read image'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+async function ensureDataUrl(url: string): Promise<string> {
+    if (url.startsWith('data:')) return url;
+    const res = await fetch(url);
+    if (!res.ok) {
+        throw new Error(`Failed to fetch image (HTTP ${res.status})`);
+    }
+    const blob = await res.blob();
+    return blobToDataUrl(blob);
+}
+
+function upscaleDataUrl(dataUrl: string, scale: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                reject(new Error('Canvas not supported'));
+                return;
+            }
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            try {
+                resolve(canvas.toDataURL('image/png'));
+            } catch {
+                reject(new Error('Failed to encode image'));
+            }
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = dataUrl;
+    });
+}
+
+async function upscaleImageUrl(url: string, scale: number): Promise<string> {
+    const safeScale = Number.isFinite(scale) ? Math.min(8, Math.max(1, scale)) : 2;
+    const dataUrl = await ensureDataUrl(url);
+    return upscaleDataUrl(dataUrl, safeScale);
 }

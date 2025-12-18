@@ -17,7 +17,10 @@ import SkillNodeComponent from './SkillNode';
 import TextCard from '@/components/cards/TextCard';
 import ImageStudio from '@/components/cards/ImageStudio';
 import ImageCard from '@/components/cards/ImageCard';
+import UploadImage from '@/components/cards/UploadImage';
 import GroupFrame, { GroupType } from '@/components/cards/GroupFrame';
+import MediaCard from '@/components/cards/MediaCard';
+import UpscaleCard from '@/components/cards/UpscaleCard';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -30,7 +33,10 @@ const nodeTypes = {
     textCard: TextCard,
     imageStudio: ImageStudio,
     imageCard: ImageCard,
+    uploadImage: UploadImage,
     groupFrame: GroupFrame,
+    media: MediaCard,
+    upscale: UpscaleCard,
 } as NodeTypes;
 
 export type InteractionMode = 'select' | 'hand' | 'draw_group' | 'scissors';
@@ -423,7 +429,7 @@ function SkillGraphCanvasInner({
         });
 
         let finalGroupRect = { ...rect };
-        let children = intersectingNodes;
+        const children = intersectingNodes;
 
         if (children.length > 0) {
             // Calculate Union Rect
@@ -709,10 +715,6 @@ function SkillGraphCanvasInner({
             };
         });
     }, [edges, hoveredEdgeId, interactionMode]);
-
-    useEffect(() => {
-        if (interactionMode !== 'scissors') setHoveredEdgeId(null);
-    }, [interactionMode]);
 
     // Handle edge click for scissors mode
     const onEdgeClick = useCallback((_: React.MouseEvent, edge: SkillEdge) => {

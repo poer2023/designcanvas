@@ -44,6 +44,22 @@ export const NODE_PORTS: Record<string, { inputs: PortDefinition[]; outputs: Por
             { id: 'contextOut', type: 'context', label: 'Context' },
         ],
     },
+    // Media (PRD v2.1) - reuse existing assets
+    media: {
+        inputs: [],
+        outputs: [
+            { id: 'imageOut', type: 'image', label: 'Image' },
+        ],
+    },
+    // Upscale (PRD v2.1 minimal) - post-process image
+    upscale: {
+        inputs: [
+            { id: 'imageIn', type: 'image', label: 'Image' },
+        ],
+        outputs: [
+            { id: 'imageOut', type: 'image', label: 'Image' },
+        ],
+    },
     // TextCard (notes/brief)
     textCard: {
         inputs: [

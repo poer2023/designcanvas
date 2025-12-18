@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback, memo } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { useState, useCallback, memo, useRef } from 'react';
+import { Handle, NodeToolbar, Position } from '@xyflow/react';
 import {
     Upload,
     Image as ImageIcon,
@@ -12,12 +12,19 @@ import {
     Plus,
     Sparkles,
 } from 'lucide-react';
+import { ActionBar, type ActionId } from '@/components/canvas/ActionBar';
+import { useGraphStore } from '@/store/graphStore';
+import { useSnapshotStore, type PortKey } from '@/store/snapshotStore';
+import { v4 as uuidv4 } from 'uuid';
 
 interface UploadImageData {
     imageUrl?: string;
     caption?: string;
     favorite?: boolean;
     locked?: boolean;
+    color?: string;
+    skillName?: string;
+    status?: 'idle' | 'running' | 'success' | 'fail';
 }
 
 interface UploadImageProps {
@@ -32,6 +39,30 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
     const [favorite, setFavorite] = useState(data.favorite || false);
     const [locked, setLocked] = useState(data.locked || false);
     const [isDragging, setIsDragging] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const { nodes, setNodes, removeNode, toggleNodeLock, updateNodeData } = useGraphStore();
+    const createSnapshot = useSnapshotStore(state => state.createSnapshot);
+    const resetSnapshots = useSnapshotStore(state => state.resetSnapshots);
+
+    const cycleColor = useCallback(() => {
+        const colors = [undefined, '#FEF3C7', '#DBEAFE', '#DCFCE7', '#FCE7F3', '#E0E7FF'] as const;
+        const current = data.color as string | undefined;
+        const currentIndex = Math.max(0, colors.findIndex(c => c === current));
+        const next = colors[(currentIndex + 1) % colors.length];
+        updateNodeData(id, { color: next });
+    }, [id, data.color, updateNodeData]);
+
+    const writeSnapshots = useCallback((url: string, nextCaption: string, source: string) => {
+        createSnapshot(id, 'imageOut' as PortKey, url);
+        createSnapshot(id, 'contextOut' as PortKey, {
+            imageUrl: url,
+            caption: nextCaption,
+            source,
+            nodeId: id,
+            timestamp: Date.now(),
+        });
+    }, [id, createSnapshot]);
 
     const handleDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -41,11 +72,14 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
         if (files.length > 0 && files[0].type.startsWith('image/')) {
             const reader = new FileReader();
             reader.onload = (event) => {
-                setImageUrl(event.target?.result as string);
+                const url = event.target?.result as string;
+                setImageUrl(url);
+                updateNodeData(id, { imageUrl: url, source: 'dragdrop' });
+                writeSnapshots(url, caption, 'dragdrop');
             };
             reader.readAsDataURL(files[0]);
         }
-    }, []);
+    }, [id, caption, updateNodeData, writeSnapshots]);
 
     const handlePaste = useCallback((e: React.ClipboardEvent) => {
         const items = e.clipboardData.items;
@@ -55,22 +89,111 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
                 if (blob) {
                     const reader = new FileReader();
                     reader.onload = (event) => {
-                        setImageUrl(event.target?.result as string);
+                        const url = event.target?.result as string;
+                        setImageUrl(url);
+                        updateNodeData(id, { imageUrl: url, source: 'paste' });
+                        writeSnapshots(url, caption, 'paste');
                     };
                     reader.readAsDataURL(blob);
                 }
             }
         }
-    }, []);
+    }, [id, caption, updateNodeData, writeSnapshots]);
 
     const handleClear = useCallback(() => {
         setImageUrl('');
-    }, []);
+        updateNodeData(id, { imageUrl: '' });
+        resetSnapshots(id, 'imageOut' as PortKey);
+        resetSnapshots(id, 'contextOut' as PortKey);
+    }, [id, resetSnapshots, updateNodeData]);
 
     const isFinal = favorite || locked;
 
+    const handleReplaceInput = useCallback(() => {
+        fileInputRef.current?.click();
+    }, []);
+
+    const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const url = event.target?.result as string;
+            setImageUrl(url);
+            updateNodeData(id, { imageUrl: url, source: 'picker' });
+            writeSnapshots(url, caption, 'picker');
+        };
+        reader.readAsDataURL(file);
+        e.target.value = '';
+    }, [id, caption, updateNodeData, writeSnapshots]);
+
+    const handleAction = useCallback((actionId: ActionId) => {
+        switch (actionId) {
+            case 'replaceInput':
+                handleReplaceInput();
+                break;
+            case 'resetInput':
+                handleClear();
+                break;
+            case 'duplicate': {
+                const nodeToCopy = nodes.find(n => n.id === id);
+                if (!nodeToCopy) return;
+                const newNode = {
+                    ...JSON.parse(JSON.stringify(nodeToCopy)),
+                    id: uuidv4(),
+                    position: {
+                        x: nodeToCopy.position.x + 50,
+                        y: nodeToCopy.position.y + 50,
+                    },
+                    parentId: undefined,
+                    selected: false,
+                };
+                setNodes([...nodes, newNode]);
+                break;
+            }
+            case 'delete':
+                removeNode(id);
+                break;
+            case 'lock':
+            case 'unlock':
+                toggleNodeLock(id);
+                setLocked(!locked);
+                break;
+            case 'rename': {
+                const currentName = (data.skillName as string | undefined) || 'Upload Image';
+                const nextName = window.prompt('Rename node', currentName);
+                if (nextName && nextName.trim()) updateNodeData(id, { skillName: nextName.trim() });
+                break;
+            }
+            case 'color':
+                cycleColor();
+                break;
+            default:
+                break;
+        }
+    }, [handleReplaceInput, handleClear, nodes, setNodes, removeNode, toggleNodeLock, id, locked, data.skillName, updateNodeData, cycleColor]);
+
     return (
         <div className="group/card relative">
+            {/* PRD v2.1: Action Bar */}
+            <NodeToolbar isVisible={selected} position={Position.Top} offset={10}>
+                <ActionBar
+                    nodeId={id}
+                    nodeType="uploadImage"
+                    isLocked={locked}
+                    hasResults={!!imageUrl}
+                    onAction={handleAction}
+                />
+            </NodeToolbar>
+
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+            />
             {/* Left Handle (Target) - Full height hit area, visual button centered */}
             <div className="absolute -left-6 top-0 h-full w-6 z-10 group/handle flex items-center justify-center">
                 <Handle
@@ -113,6 +236,7 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
                     ${selected ? 'ring-2 ring-gray-400 shadow-2xl' : 'shadow-lg border border-gray-200'}
                     ${isFinal ? 'ring-2 ring-amber-400' : ''}
                 `}
+                style={{ backgroundColor: (data.color as string | undefined) || undefined }}
                 onPaste={handlePaste}
             >
                 {/* Header */}
@@ -181,7 +305,20 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
                 <div className="absolute bottom-4 left-4 right-4">
                     <input
                         value={caption}
-                        onChange={(e) => setCaption(e.target.value)}
+                        onChange={(e) => {
+                            const next = e.target.value;
+                            setCaption(next);
+                            updateNodeData(id, { caption: next });
+                            if (imageUrl) {
+                                createSnapshot(id, 'contextOut' as PortKey, {
+                                    imageUrl,
+                                    caption: next,
+                                    source: 'caption',
+                                    nodeId: id,
+                                    timestamp: Date.now(),
+                                });
+                            }
+                        }}
                         placeholder="Add caption..."
                         className="w-full px-4 py-3 text-sm bg-white/80 backdrop-blur-md border border-gray-200 rounded-[20px] shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all hover:bg-white"
                     />

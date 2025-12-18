@@ -3,6 +3,7 @@
 import { X, MoreHorizontal, Lock, Pin, Play, RotateCcw } from 'lucide-react';
 import type { SkillNode } from '@/store/graphStore';
 import { useState } from 'react';
+import { replayRecipe, useRecipeStore } from '@/store/recipeStore';
 
 interface InspectorProps {
     isOpen: boolean;
@@ -247,8 +248,61 @@ function NodeOutputContent({ node }: { node: SkillNode }) {
 
 // Node Recipe Content
 function NodeRecipeContent({ node }: { node: SkillNode }) {
+    const recipes = useRecipeStore(state => state.getRecipesForNode(node.id));
+
     return (
         <div className="space-y-3">
+            <div>
+                <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs text-[var(--text-tertiary)]">Runs</label>
+                    <span className="text-[10px] text-[var(--text-tertiary)]">{recipes.length}</span>
+                </div>
+
+                {recipes.length === 0 ? (
+                    <p className="text-xs text-[var(--text-tertiary)] text-center py-6">
+                        No runs yet. Use the node Action Bar to run.
+                    </p>
+                ) : (
+                    <div className="space-y-2">
+                        {recipes
+                            .slice()
+                            .sort((a, b) => b.timestamp - a.timestamp)
+                            .slice(0, 10)
+                            .map((recipe) => (
+                                <div
+                                    key={recipe.id}
+                                    className="p-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-subtle)]"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="min-w-0">
+                                            <div className="text-xs font-medium text-[var(--text-primary)] truncate">
+                                                {recipe.runMode}
+                                            </div>
+                                            <div className="text-[10px] text-[var(--text-tertiary)]">
+                                                {new Date(recipe.timestamp).toLocaleString()}
+                                                {recipe.duration !== undefined ? ` · ${recipe.duration}ms` : ''}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => replayRecipe(recipe.id)}
+                                            disabled={recipe.status !== 'success'}
+                                            className="px-2 py-1 rounded text-[10px] font-medium bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:bg-[var(--bg-input)] disabled:opacity-40 transition-colors"
+                                            title={recipe.status !== 'success' ? 'Only successful runs can be replayed' : 'Replay (restore active outputs)'}
+                                        >
+                                            Replay
+                                        </button>
+                                    </div>
+                                    {recipe.error && (
+                                        <div className="mt-2 text-[10px] text-red-400">
+                                            {recipe.error}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                    </div>
+                )}
+            </div>
+
             <div>
                 <label className="block text-xs text-[var(--text-tertiary)] mb-1">Skill ID</label>
                 <code className="text-xs text-[var(--text-secondary)] bg-[var(--bg-input)] px-2 py-1 rounded block">
