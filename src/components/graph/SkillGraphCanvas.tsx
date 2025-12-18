@@ -21,7 +21,9 @@ import UploadImage from '@/components/cards/UploadImage';
 import GroupFrame, { GroupType } from '@/components/cards/GroupFrame';
 import MediaCard from '@/components/cards/MediaCard';
 import UpscaleCard from '@/components/cards/UpscaleCard';
+import EditCard from '@/components/cards/EditCard';
 import { v4 as uuidv4 } from 'uuid';
+import { unsubscribeFromEdge } from '@/store/snapshotStore';
 
 /**
  * PRD v1.8: Node Types
@@ -37,6 +39,7 @@ const nodeTypes = {
     groupFrame: GroupFrame,
     media: MediaCard,
     upscale: UpscaleCard,
+    edit: EditCard,
 } as NodeTypes;
 
 export type InteractionMode = 'select' | 'hand' | 'draw_group' | 'scissors';
@@ -81,6 +84,9 @@ function SkillGraphCanvasInner({
         addNode,
         setNodes,
         setEdges,
+        updateNodeData,
+        pushHistory,
+        setHistoryPaused,
     } = useGraphStore();
 
     // Refs for copy/paste to avoid dependency array issues
@@ -144,6 +150,7 @@ function SkillGraphCanvasInner({
                             },
                         };
 
+                        useGraphStore.getState().pushHistory({ label: 'pasteImage' });
                         setNodesRef.current([...nodesRef.current, newNode]);
                         console.log('[PRD v1.8] Auto-created raw ImageCard from paste');
                     };
@@ -212,6 +219,7 @@ function SkillGraphCanvasInner({
                 console.log('[Paste] Pasting node:', newNode.id, newNode.type);
 
                 // Add new node to the canvas
+                useGraphStore.getState().pushHistory({ label: 'pasteNode' });
                 setNodesRef.current([...nodesRef.current, newNode]);
 
                 // Update clipboard position for subsequent pastes
@@ -338,14 +346,35 @@ function SkillGraphCanvasInner({
             const skillType = event.dataTransfer.getData('application/skilltype');
             if (!skillType) return;
 
+            const skillDataRaw = event.dataTransfer.getData('application/skilldata');
+
             const position = screenToFlowPosition({
                 x: event.clientX,
                 y: event.clientY,
             });
 
-            addNode(skillType, position);
+            // Single undo step for "drop to create"
+            pushHistory({ label: 'drop' });
+            setHistoryPaused(true);
+
+            const newNodeId = addNode(skillType, position);
+            if (!newNodeId) {
+                setHistoryPaused(false);
+                return;
+            }
+
+            if (skillDataRaw) {
+                try {
+                    const data = JSON.parse(skillDataRaw) as Record<string, unknown>;
+                    updateNodeData(newNodeId, data);
+                } catch {
+                    // ignore invalid payload
+                }
+            }
+
+            setHistoryPaused(false);
         },
-        [screenToFlowPosition, addNode]
+        [screenToFlowPosition, addNode, updateNodeData, pushHistory, setHistoryPaused]
     );
 
     // Group Drawing Handlers
@@ -389,6 +418,8 @@ function SkillGraphCanvasInner({
 
         const bounds = reactFlowWrapper.current?.getBoundingClientRect();
         if (!bounds) return;
+
+        pushHistory({ label: 'addGroup' });
 
         // Calculate Box in Screen Coords
         const startX = Math.min(drawStart.x, drawCurrent.x);
@@ -517,7 +548,7 @@ function SkillGraphCanvasInner({
         setNodes(newNodes);
         onInteractionModeChange('select');
 
-    }, [isDrawing, drawStart, drawCurrent, screenToFlowPosition, nodes, setNodes, groupTypeToDraw, onInteractionModeChange]);
+    }, [isDrawing, drawStart, drawCurrent, screenToFlowPosition, nodes, setNodes, groupTypeToDraw, onInteractionModeChange, pushHistory]);
 
     // Render Preview Box
     const previewBox = useMemo(() => {
@@ -658,6 +689,10 @@ function SkillGraphCanvasInner({
         setNodes(reorderNodesForParenting(nextNodes));
     }, [nodes, getAbsolutePosition, getNodeDimensions, reorderNodesForParenting, setNodes]);
 
+    const onNodeDragStart = useCallback((_: React.MouseEvent, dragged: SkillNode) => {
+        pushHistory({ label: 'move' });
+    }, [pushHistory]);
+
     useEffect(() => {
         if (!isPanning) return;
         const handleMouseUp = () => setIsPanning(false);
@@ -720,8 +755,10 @@ function SkillGraphCanvasInner({
     const onEdgeClick = useCallback((_: React.MouseEvent, edge: SkillEdge) => {
         if (interactionMode !== 'scissors') return;
         // Remove the clicked edge
+        pushHistory({ label: 'removeEdge' });
+        unsubscribeFromEdge(edge);
         setEdges(edges.filter(e => e.id !== edge.id));
-    }, [interactionMode, edges, setEdges]);
+    }, [interactionMode, edges, setEdges, pushHistory]);
 
     const handleEdgeMouseEnter = useCallback((_: React.MouseEvent, edge: SkillEdge) => {
         if (interactionMode !== 'scissors') return;
@@ -751,6 +788,7 @@ function SkillGraphCanvasInner({
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                onNodeDragStart={onNodeDragStart}
                 onNodeDragStop={onNodeDragStop}
                 onEdgeClick={onEdgeClick}
                 onEdgeMouseEnter={handleEdgeMouseEnter}

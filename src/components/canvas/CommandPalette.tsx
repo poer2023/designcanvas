@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Search, X, Type, FileText, Upload, Sparkles, LayoutGrid, Scissors, Square, Image as ImageIcon, ArrowUp } from 'lucide-react';
+import { Search, X, Type, FileText, Upload, Sparkles, LayoutGrid, Scissors, Square, Image as ImageIcon, ArrowUp, Crop } from 'lucide-react';
 
 // v1.7 Node Types for Command Palette
 const NODE_TYPES = [
@@ -11,6 +11,7 @@ const NODE_TYPES = [
     { type: 'imageStudio', name: 'Image Studio', icon: Sparkles, color: '#8B5CF6', shortcut: 'I' },
     { type: 'media', name: 'Media', icon: ImageIcon, color: '#F59E0B', shortcut: 'M' },
     { type: 'upscale', name: 'Upscale', icon: ArrowUp, color: '#0EA5E9', shortcut: '' },
+    { type: 'edit', name: 'Edit (Crop)', icon: Crop, color: '#22C55E', shortcut: '' },
     { type: 'style', name: 'Style Group', icon: LayoutGrid, color: '#8B5CF6', shortcut: '' },
     { type: 'refset', name: 'RefSet Group', icon: LayoutGrid, color: '#10B981', shortcut: '' },
     { type: 'candidates', name: 'Candidates Group', icon: LayoutGrid, color: '#EF4444', shortcut: '' },

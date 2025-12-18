@@ -349,6 +349,7 @@ function TextCardComponent({ id, data, selected }: TextCardProps) {
                 setShowPreview(true);
                 break;
             case 'duplicate': {
+                useGraphStore.getState().pushHistory({ label: 'duplicate' });
                 const nodeToCopy = nodes.find(n => n.id === id);
                 if (!nodeToCopy) return;
                 const newNode = {

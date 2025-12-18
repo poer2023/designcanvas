@@ -148,6 +148,7 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
                 })();
                 break;
             case 'duplicate': {
+                useGraphStore.getState().pushHistory({ label: 'duplicate' });
                 const nodeToCopy = nodes.find(n => n.id === id);
                 if (!nodeToCopy) return;
                 const newNode = {

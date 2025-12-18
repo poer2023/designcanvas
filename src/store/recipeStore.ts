@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { type PortKey, useSnapshotStore } from './snapshotStore';
 
@@ -33,6 +34,7 @@ export interface NodeIOEntry {
 export interface RecipeEntry {
     id: string;
     timestamp: number;
+    projectId?: string;
 
     // PRD v2.1: Run context
     runMode: RunMode;
@@ -82,94 +84,105 @@ interface RecipeState {
     updateRecipeStatus: (id: string, status: RecipeEntry['status'], duration?: number, error?: string) => void;
     setRecipeOutputs: (id: string, outputs: RecipeEntry['outputs']) => void;
     updateNodeIoMap: (id: string, nodeId: string, entry: NodeIOEntry) => void;
-    getRecipesForNode: (nodeId: string) => RecipeEntry[];
-    getLatestRecipe: (nodeId: string) => RecipeEntry | undefined;
+    getRecipesForNode: (nodeId: string, projectId?: string) => RecipeEntry[];
+    getLatestRecipe: (nodeId: string, projectId?: string) => RecipeEntry | undefined;
     getRecipeById: (id: string) => RecipeEntry | undefined;
     getRecentRecipes: (limit?: number) => RecipeEntry[];
     clearRecipes: () => void;
 }
 
-export const useRecipeStore = create<RecipeState>((set, get) => ({
-    recipes: [],
+export const useRecipeStore = create<RecipeState>()(
+    persist(
+        (set, get) => ({
+            recipes: [],
 
-    addRecipe: (recipe) => {
-        const id = uuidv4();
-        const newRecipe: RecipeEntry = {
-            ...recipe,
-            id,
-            timestamp: Date.now(),
-            status: 'pending',
-            // Ensure defaults for v2.1 fields
-            runMode: recipe.runMode || 'RUN_NODE',
-            startNodeId: recipe.startNodeId || recipe.nodeId,
-            affectedNodeIds: recipe.affectedNodeIds || [recipe.nodeId],
-            nodeIoMap: recipe.nodeIoMap || {},
-        };
-        set({ recipes: [...get().recipes, newRecipe] });
-        console.log(`[PRD v2.1] Recipe created: ${id} (mode: ${newRecipe.runMode}, affected: ${newRecipe.affectedNodeIds.length} nodes)`);
-        return id;
-    },
+            addRecipe: (recipe) => {
+                const id = uuidv4();
+                const newRecipe: RecipeEntry = {
+                    ...recipe,
+                    id,
+                    timestamp: Date.now(),
+                    status: 'pending',
+                    projectId: recipe.projectId,
+                    // Ensure defaults for v2.1 fields
+                    runMode: recipe.runMode || 'RUN_NODE',
+                    startNodeId: recipe.startNodeId || recipe.nodeId,
+                    affectedNodeIds: recipe.affectedNodeIds || [recipe.nodeId],
+                    nodeIoMap: recipe.nodeIoMap || {},
+                };
+                set({ recipes: [...get().recipes, newRecipe].slice(-200) });
+                console.log(`[PRD v2.1] Recipe created: ${id} (mode: ${newRecipe.runMode}, affected: ${newRecipe.affectedNodeIds.length} nodes)`);
+                return id;
+            },
 
-    updateRecipeStatus: (id, status, duration, error) => {
-        set({
-            recipes: get().recipes.map(r =>
-                r.id === id ? { ...r, status, duration, error } : r
-            ),
-        });
-    },
+            updateRecipeStatus: (id, status, duration, error) => {
+                set({
+                    recipes: get().recipes.map(r =>
+                        r.id === id ? { ...r, status, duration, error } : r
+                    ),
+                });
+            },
 
-    setRecipeOutputs: (id, outputs) => {
-        set({
-            recipes: get().recipes.map(r =>
-                r.id === id ? { ...r, outputs: { ...r.outputs, ...outputs } } : r
-            ),
-        });
-    },
+            setRecipeOutputs: (id, outputs) => {
+                set({
+                    recipes: get().recipes.map(r =>
+                        r.id === id ? { ...r, outputs: { ...r.outputs, ...outputs } } : r
+                    ),
+                });
+            },
 
-    // PRD v2.1: Update IO map for a specific node in a recipe
-    updateNodeIoMap: (id, nodeId, entry) => {
-        set({
-            recipes: get().recipes.map(r =>
-                r.id === id
-                    ? {
-                        ...r,
-                        nodeIoMap: {
-                            ...r.nodeIoMap,
-                            [nodeId]: entry
-                        }
-                    }
-                    : r
-            ),
-        });
-    },
+            // PRD v2.1: Update IO map for a specific node in a recipe
+            updateNodeIoMap: (id, nodeId, entry) => {
+                set({
+                    recipes: get().recipes.map(r =>
+                        r.id === id
+                            ? {
+                                ...r,
+                                nodeIoMap: {
+                                    ...r.nodeIoMap,
+                                    [nodeId]: entry
+                                }
+                            }
+                            : r
+                    ),
+                });
+            },
 
-    getRecipesForNode: (nodeId) => {
-        return get().recipes.filter(r =>
-            r.nodeId === nodeId || r.affectedNodeIds.includes(nodeId)
-        );
-    },
+            getRecipesForNode: (nodeId, projectId) => {
+                return get().recipes.filter(r =>
+                    (!projectId || r.projectId === projectId) &&
+                    (r.nodeId === nodeId || r.affectedNodeIds.includes(nodeId))
+                );
+            },
 
-    getLatestRecipe: (nodeId) => {
-        const nodeRecipes = get().recipes.filter(r =>
-            r.nodeId === nodeId || r.affectedNodeIds.includes(nodeId)
-        );
-        return nodeRecipes.length > 0
-            ? nodeRecipes.reduce((a, b) => a.timestamp > b.timestamp ? a : b)
-            : undefined;
-    },
+            getLatestRecipe: (nodeId, projectId) => {
+                const nodeRecipes = get().recipes.filter(r =>
+                    (!projectId || r.projectId === projectId) &&
+                    (r.nodeId === nodeId || r.affectedNodeIds.includes(nodeId))
+                );
+                return nodeRecipes.length > 0
+                    ? nodeRecipes.reduce((a, b) => a.timestamp > b.timestamp ? a : b)
+                    : undefined;
+            },
 
-    getRecipeById: (id) => {
-        return get().recipes.find(r => r.id === id);
-    },
+            getRecipeById: (id) => {
+                return get().recipes.find(r => r.id === id);
+            },
 
-    getRecentRecipes: (limit = 10) => {
-        return get().recipes
-            .sort((a, b) => b.timestamp - a.timestamp)
-            .slice(0, limit);
-    },
+            getRecentRecipes: (limit = 10) => {
+                return get().recipes
+                    .sort((a, b) => b.timestamp - a.timestamp)
+                    .slice(0, limit);
+            },
 
-    clearRecipes: () => set({ recipes: [] }),
-}));
+            clearRecipes: () => set({ recipes: [] }),
+        }),
+        {
+            name: 'posterlab-recipes-v2.1',
+            partialize: (state) => ({ recipes: state.recipes }),
+        }
+    )
+);
 
 // ============================================================================
 // Helpers
@@ -183,13 +196,15 @@ export function createRecipeFromRun(
     skillId: string,
     modelParams: RecipeEntry['modelParams'],
     inputRefs: RecipeEntry['inputRefs'],
-    seed?: number
+    seed?: number,
+    projectId?: string
 ): string {
     return useRecipeStore.getState().addRecipe({
         runMode: 'RUN_NODE',
         startNodeId: nodeId,
         affectedNodeIds: [nodeId],
         nodeIoMap: {},
+        projectId,
         nodeId,
         skillId,
         skillVersion: '1.0.0',
@@ -207,14 +222,19 @@ export function createRecipeFromDagRun(
     runMode: RunMode,
     startNodeId: string,
     affectedNodeIds: string[],
-    skillId: string = 'dag-run',
-    modelParams: RecipeEntry['modelParams'] = {},
+    options: {
+        projectId?: string;
+        skillId?: string;
+        modelParams?: RecipeEntry['modelParams'];
+    } = {},
 ): string {
+    const { projectId, skillId = 'dag-run', modelParams = {} } = options;
     return useRecipeStore.getState().addRecipe({
         runMode,
         startNodeId,
         affectedNodeIds,
         nodeIoMap: {},
+        projectId,
         nodeId: startNodeId,
         skillId,
         skillVersion: '1.0.0',

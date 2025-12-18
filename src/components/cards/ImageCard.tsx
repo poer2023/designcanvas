@@ -22,6 +22,7 @@ import { useSnapshotStore, type StaleState, type PortKey } from '@/store/snapsho
 import { ActionBar, type ActionId } from '@/components/canvas/ActionBar';
 import { useGraphStore } from '@/store/graphStore';
 import { v4 as uuidv4 } from 'uuid';
+import { useRecipeStore } from '@/store/recipeStore';
 
 /**
  * PRD v1.8: Unified Image Card
@@ -230,6 +231,30 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
             case 'resetInput':
                 handleResetInput();
                 break;
+            case 'saveToAssets':
+                (async () => {
+                    const projectId = useGraphStore.getState().projectId;
+                    if (!projectId) return;
+                    if (!imageUrl) return;
+
+                    const latestRecipe = useRecipeStore.getState().getLatestRecipe(id);
+                    const recipeId = latestRecipe?.id || 'image';
+
+                    await fetch('/api/posters', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            project_id: projectId,
+                            image_url: imageUrl,
+                            recipe_id: recipeId,
+                            seed: 0,
+                            tags: [],
+                        }),
+                    });
+
+                    window.dispatchEvent(new Event('posterlab:assets-updated'));
+                })();
+                break;
             case 'rename': {
                 const currentName = (data.skillName as string | undefined) || 'Image';
                 const nextName = window.prompt('Rename node', currentName);
@@ -237,6 +262,7 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                 break;
             }
             case 'duplicate': {
+                useGraphStore.getState().pushHistory({ label: 'duplicate' });
                 const nodeToCopy = nodes.find(n => n.id === id);
                 if (!nodeToCopy) return;
                 const newNode = {
@@ -266,7 +292,7 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
             default:
                 break;
         }
-    }, [handleReplaceInput, handleResetInput, data.skillName, id, locked, updateNodeData, nodes, setNodes, removeNode, cycleColor]);
+    }, [handleReplaceInput, handleResetInput, imageUrl, data.skillName, id, locked, updateNodeData, nodes, setNodes, removeNode, cycleColor]);
 
     // Studio mode handlers
     const handleRun = useCallback(async () => {

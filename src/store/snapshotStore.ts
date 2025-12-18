@@ -337,7 +337,7 @@ export const useSnapshotStore = create<SnapshotState>((set, get) => ({
     },
 
     clearSnapshots: () => {
-        set({ snapshots: {}, snapshotHistory: {}, activeByProducerPort: {}, staleStates: {} });
+        set({ snapshots: {}, snapshotHistory: {}, activeByProducerPort: {}, subscriptions: {}, staleStates: {} });
     },
 
     removeProducerSnapshots: (producerId) => {

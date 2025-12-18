@@ -60,6 +60,15 @@ export const NODE_PORTS: Record<string, { inputs: PortDefinition[]; outputs: Por
             { id: 'imageOut', type: 'image', label: 'Image' },
         ],
     },
+    // Edit (PRD v2.1 minimal) - basic image edit (e.g. crop)
+    edit: {
+        inputs: [
+            { id: 'imageIn', type: 'image', label: 'Image' },
+        ],
+        outputs: [
+            { id: 'imageOut', type: 'image', label: 'Image' },
+        ],
+    },
     // TextCard (notes/brief)
     textCard: {
         inputs: [

@@ -1,18 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type DragEvent } from 'react';
 import {
     Palette,
     ImageIcon,
     Shapes,
+    Album,
     ChevronLeft,
     ChevronRight,
     GripVertical,
     Plus
 } from 'lucide-react';
 import type { StyleProfile, RefSet, Element } from '@/types';
+import type { Poster } from '@/types/poster';
 
-type AssetTab = 'styles' | 'inspiration' | 'elements';
+type AssetTab = 'styles' | 'inspiration' | 'elements' | 'images';
 
 interface AssetsDrawerProps {
     isOpen: boolean;
@@ -20,7 +22,8 @@ interface AssetsDrawerProps {
     styles?: StyleProfile[];
     refsets?: RefSet[];
     elements?: Element[];
-    onDragStart?: (type: AssetTab, item: StyleProfile | RefSet | Element) => void;
+    images?: Poster[];
+    onDragStart?: (type: AssetTab, item: StyleProfile | RefSet | Element | Poster) => void;
 }
 
 export default function AssetsDrawer({
@@ -29,14 +32,16 @@ export default function AssetsDrawer({
     styles = [],
     refsets = [],
     elements = [],
+    images = [],
     onDragStart,
 }: AssetsDrawerProps) {
-    const [activeTab, setActiveTab] = useState<AssetTab>('styles');
+    const [activeTab, setActiveTab] = useState<AssetTab>('images');
 
     const tabs = [
         { id: 'styles' as const, label: 'Styles', icon: Palette, count: styles.length },
         { id: 'inspiration' as const, label: 'Inspiration', icon: ImageIcon, count: refsets.length },
         { id: 'elements' as const, label: 'Elements', icon: Shapes, count: elements.length },
+        { id: 'images' as const, label: 'Images', icon: Album, count: images.length },
     ];
 
     return (
@@ -99,6 +104,9 @@ export default function AssetsDrawer({
                         )}
                         {activeTab === 'elements' && (
                             <ElementsPanel elements={elements} onDragStart={(item) => onDragStart?.('elements', item)} />
+                        )}
+                        {activeTab === 'images' && (
+                            <ImagesPanel images={images} onDragStart={(item) => onDragStart?.('images', item)} />
                         )}
                     </div>
                 </div>
@@ -311,6 +319,74 @@ function ElementsPanel({
             {elements.map((element) => (
                 <ElementCard key={element.id} element={element} onDragStart={() => onDragStart?.(element)} />
             ))}
+        </div>
+    );
+}
+
+// Images Panel (Gallery assets)
+function ImagesPanel({
+    images,
+    onDragStart
+}: {
+    images: Poster[];
+    onDragStart?: (item: Poster) => void;
+}) {
+    if (images.length === 0) {
+        return (
+            <EmptyState
+                icon={Album}
+                title="No images yet"
+                description="Save a result to Assets, then drag it into the canvas"
+            />
+        );
+    }
+
+    return (
+        <div className="grid grid-cols-2 gap-2">
+            {images.map((poster) => (
+                <ImageAssetCard
+                    key={poster.id}
+                    poster={poster}
+                    onDragStart={(e) => {
+                        // Drag into canvas => create Media node and seed it with imageUrl
+                        e.dataTransfer.setData('application/skilltype', 'media');
+                        e.dataTransfer.setData('application/skilldata', JSON.stringify({
+                            imageUrl: poster.image_url,
+                            skillName: 'Media',
+                        }));
+                        onDragStart?.(poster);
+                    }}
+                />
+            ))}
+        </div>
+    );
+}
+
+function ImageAssetCard({
+    poster,
+    onDragStart
+}: {
+    poster: Poster;
+    onDragStart: (e: DragEvent<HTMLDivElement>) => void;
+}) {
+    return (
+        <div
+            draggable
+            onDragStart={onDragStart}
+            className="
+                group relative rounded-lg overflow-hidden cursor-grab
+                bg-[var(--bg-card)] border border-[var(--border-subtle)]
+                hover:border-[var(--accent-primary)]/50 hover:shadow-md
+                transition-all
+            "
+        >
+            <div className="absolute left-1 top-1 opacity-0 group-hover:opacity-60 text-white drop-shadow">
+                <GripVertical size={12} />
+            </div>
+            <div className="relative aspect-[4/3] bg-[var(--bg-hover)]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={poster.image_url} alt="" className="w-full h-full object-cover" />
+            </div>
         </div>
     );
 }

@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useMemo, useState } from 'react';
 import { Handle, NodeToolbar, Position } from '@xyflow/react';
-import { Image as ImageIcon, Plus, Sparkles, X } from 'lucide-react';
+import { Plus, Scissors, X } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { ActionBar, type ActionId } from '@/components/canvas/ActionBar';
 import { useGraphStore } from '@/store/graphStore';
@@ -10,30 +10,32 @@ import { useSnapshotStore, type PortKey } from '@/store/snapshotStore';
 import { runGraph } from '@/lib/engine/runner';
 import { useRecipeStore } from '@/store/recipeStore';
 
-interface UpscaleData {
-    scale?: 2 | 4;
+interface EditData {
+    operation?: 'crop';
+    ratio?: string;
     locked?: boolean;
     color?: string;
     skillName?: string;
     status?: 'idle' | 'running' | 'success' | 'fail';
 }
 
-interface UpscaleCardProps {
+interface EditCardProps {
     id: string;
-    data: Partial<UpscaleData>;
+    data: Partial<EditData>;
     selected?: boolean;
 }
 
-function UpscaleCardComponent({ id, data, selected }: UpscaleCardProps) {
+const RATIOS = ['1:1', '3:2', '2:3', '16:9', '9:16'];
+
+function EditCardComponent({ id, data, selected }: EditCardProps) {
     const [previewOpen, setPreviewOpen] = useState(false);
 
     const locked = !!data.locked;
-    const scale = (data.scale as 2 | 4 | undefined) ?? 2;
+    const ratio = (data.ratio as string | undefined) || '1:1';
     const isRunning = data.status === 'running';
 
     const { nodes, setNodes, removeNode, toggleNodeLock, updateNodeData, updateNodeStatus } = useGraphStore();
     const resetSnapshots = useSnapshotStore(s => s.resetSnapshots);
-
     const staleState = useSnapshotStore(s => s.getStaleState(id));
 
     const inputImage = useSnapshotStore(
@@ -105,7 +107,7 @@ function UpscaleCardComponent({ id, data, selected }: UpscaleCardProps) {
                     if (typeof url !== 'string' || !url) return;
 
                     const latestRecipe = useRecipeStore.getState().getLatestRecipe(id);
-                    const recipeId = latestRecipe?.id || 'upscale';
+                    const recipeId = latestRecipe?.id || 'edit';
 
                     await fetch('/api/posters', {
                         method: 'POST',
@@ -147,7 +149,7 @@ function UpscaleCardComponent({ id, data, selected }: UpscaleCardProps) {
                 toggleNodeLock(id);
                 break;
             case 'rename': {
-                const currentName = (data.skillName as string | undefined) || 'Upscale';
+                const currentName = (data.skillName as string | undefined) || 'Edit';
                 const nextName = window.prompt('Rename node', currentName);
                 if (nextName && nextName.trim()) updateNodeData(id, { skillName: nextName.trim() });
                 break;
@@ -162,11 +164,10 @@ function UpscaleCardComponent({ id, data, selected }: UpscaleCardProps) {
 
     return (
         <div className="group/card relative">
-            {/* PRD v2.1: Action Bar */}
             <NodeToolbar isVisible={selected} position={Position.Top} offset={10}>
                 <ActionBar
                     nodeId={id}
-                    nodeType="upscale"
+                    nodeType="edit"
                     isLocked={locked}
                     isRunning={isRunning}
                     hasResults={hasResults}
@@ -202,7 +203,7 @@ function UpscaleCardComponent({ id, data, selected }: UpscaleCardProps) {
 
             <div
                 className={`
-                    bg-white rounded-[32px] overflow-hidden min-w-[300px] max-w-[400px]
+                    bg-white rounded-[32px] overflow-hidden min-w-[300px] max-w-[420px]
                     flex flex-col relative
                     transition-all duration-200
                     ${selected ? 'ring-2 ring-gray-400 shadow-2xl' : 'shadow-lg border border-gray-200'}
@@ -219,21 +220,21 @@ function UpscaleCardComponent({ id, data, selected }: UpscaleCardProps) {
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-3">
                     <div className="flex items-center gap-2 text-gray-800">
-                        <Sparkles size={16} className="text-gray-500" />
-                        <span className="font-medium text-sm">{(data.skillName as string | undefined) || 'Upscale'}</span>
+                        <Scissors size={16} className="text-gray-500" />
+                        <span className="font-medium text-sm">{(data.skillName as string | undefined) || 'Edit'}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <select
-                            value={scale}
-                            disabled={locked}
-                            onChange={(e) => updateNodeData(id, { scale: Number(e.target.value) as 2 | 4 })}
-                            className="px-2 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-700 bg-white disabled:opacity-40"
-                            title="Scale"
-                        >
-                            <option value={2}>2×</option>
-                            <option value={4}>4×</option>
-                        </select>
-                    </div>
+
+                    <select
+                        value={ratio}
+                        disabled={locked}
+                        onChange={(e) => updateNodeData(id, { ratio: e.target.value, operation: 'crop' })}
+                        className="px-2 py-1.5 rounded-xl border border-gray-200 text-xs text-gray-700 bg-white disabled:opacity-40"
+                        title="Crop ratio"
+                    >
+                        {RATIOS.map(r => (
+                            <option key={r} value={r}>{r}</option>
+                        ))}
+                    </select>
                 </div>
 
                 {/* Body */}
@@ -286,4 +287,4 @@ function UpscaleCardComponent({ id, data, selected }: UpscaleCardProps) {
     );
 }
 
-export default memo(UpscaleCardComponent);
+export default memo(EditCardComponent);

@@ -16,6 +16,7 @@ import { ActionBar, type ActionId } from '@/components/canvas/ActionBar';
 import { useGraphStore } from '@/store/graphStore';
 import { useSnapshotStore, type PortKey } from '@/store/snapshotStore';
 import { v4 as uuidv4 } from 'uuid';
+import { useRecipeStore } from '@/store/recipeStore';
 
 interface UploadImageData {
     imageUrl?: string;
@@ -128,7 +129,7 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
         e.target.value = '';
     }, [id, caption, updateNodeData, writeSnapshots]);
 
-    const handleAction = useCallback((actionId: ActionId) => {
+    const handleAction = (actionId: ActionId) => {
         switch (actionId) {
             case 'replaceInput':
                 handleReplaceInput();
@@ -136,7 +137,32 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
             case 'resetInput':
                 handleClear();
                 break;
+            case 'saveToAssets':
+                (async () => {
+                    const projectId = useGraphStore.getState().projectId;
+                    if (!projectId) return;
+                    if (!imageUrl) return;
+
+                    const latestRecipe = useRecipeStore.getState().getLatestRecipe(id);
+                    const recipeId = latestRecipe?.id || 'upload';
+
+                    await fetch('/api/posters', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            project_id: projectId,
+                            image_url: imageUrl,
+                            recipe_id: recipeId,
+                            seed: 0,
+                            tags: [],
+                        }),
+                    });
+
+                    window.dispatchEvent(new Event('posterlab:assets-updated'));
+                })();
+                break;
             case 'duplicate': {
+                useGraphStore.getState().pushHistory({ label: 'duplicate' });
                 const nodeToCopy = nodes.find(n => n.id === id);
                 if (!nodeToCopy) return;
                 const newNode = {
@@ -172,7 +198,7 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
             default:
                 break;
         }
-    }, [handleReplaceInput, handleClear, nodes, setNodes, removeNode, toggleNodeLock, id, locked, data.skillName, updateNodeData, cycleColor]);
+    };
 
     return (
         <div className="group/card relative">

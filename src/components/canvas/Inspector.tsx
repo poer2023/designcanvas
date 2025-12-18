@@ -1,7 +1,7 @@
 'use client';
 
 import { X, MoreHorizontal, Lock, Pin, Play, RotateCcw } from 'lucide-react';
-import type { SkillNode } from '@/store/graphStore';
+import { useGraphStore, type SkillNode } from '@/store/graphStore';
 import { useState } from 'react';
 import { replayRecipe, useRecipeStore } from '@/store/recipeStore';
 
@@ -248,7 +248,8 @@ function NodeOutputContent({ node }: { node: SkillNode }) {
 
 // Node Recipe Content
 function NodeRecipeContent({ node }: { node: SkillNode }) {
-    const recipes = useRecipeStore(state => state.getRecipesForNode(node.id));
+    const projectId = useGraphStore(state => state.projectId);
+    const recipes = useRecipeStore(state => state.getRecipesForNode(node.id, projectId || undefined));
 
     return (
         <div className="space-y-3">

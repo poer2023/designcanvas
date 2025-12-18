@@ -15,6 +15,7 @@ import {
     Palette,
     ImageIcon,
     X,
+    BookmarkPlus,
     Loader2
 } from 'lucide-react';
 
@@ -43,6 +44,7 @@ export type ActionId =
     | 'replace'
     | 'reset'
     | 'preview'
+    | 'saveToAssets'
     // Input node actions
     | 'replaceInput'
     | 'resetInput';
@@ -54,7 +56,8 @@ export type NodeType =
     | 'groupFrame'
     | 'uploadImage'
     | 'media'
-    | 'upscale';
+    | 'upscale'
+    | 'edit';
 
 interface ActionDefinition {
     id: ActionId;
@@ -122,6 +125,12 @@ const COLOR_ACTION: ActionDefinition = {
     icon: <Palette size={ICON_SIZE} />
 };
 
+const SAVE_TO_ASSETS_ACTION: ActionDefinition = {
+    id: 'saveToAssets',
+    label: 'Save',
+    icon: <BookmarkPlus size={ICON_SIZE} />
+};
+
 const GENERATION_ACTIONS: ActionDefinition[] = [
     { id: 'run', label: 'Run', icon: <Play size={ICON_SIZE} />, primary: true },
     { id: 'runFromHere', label: 'Run from here', icon: <FastForward size={ICON_SIZE} /> },
@@ -138,12 +147,13 @@ const INPUT_ACTIONS: ActionDefinition[] = [
 // Schema mapping node types to their action sets
 const ACTION_SCHEMA: Record<NodeType, ActionId[]> = {
     textCard: ['preview', 'rename', 'duplicate', 'delete', 'lock', 'color'],
-    imageCard: ['run', 'runFromHere', 'replace', 'reset', 'preview', 'rename', 'duplicate', 'delete', 'lock'],
-    imageStudio: ['run', 'runFromHere', 'replace', 'reset', 'preview', 'rename', 'duplicate', 'delete', 'lock'],
+    imageCard: ['run', 'runFromHere', 'replace', 'reset', 'preview', 'saveToAssets', 'rename', 'duplicate', 'delete', 'lock'],
+    imageStudio: ['run', 'runFromHere', 'replace', 'reset', 'preview', 'saveToAssets', 'rename', 'duplicate', 'delete', 'lock'],
     groupFrame: ['run', 'runFromHere', 'rename', 'duplicate', 'delete', 'lock', 'color'],
-    uploadImage: ['replaceInput', 'resetInput', 'rename', 'duplicate', 'delete', 'lock', 'color'],
-    media: ['replaceInput', 'resetInput', 'rename', 'duplicate', 'delete', 'lock', 'color'],
-    upscale: ['run', 'runFromHere', 'reset', 'preview', 'rename', 'duplicate', 'delete', 'lock', 'color'],
+    uploadImage: ['replaceInput', 'resetInput', 'saveToAssets', 'rename', 'duplicate', 'delete', 'lock', 'color'],
+    media: ['replaceInput', 'resetInput', 'saveToAssets', 'rename', 'duplicate', 'delete', 'lock', 'color'],
+    upscale: ['run', 'runFromHere', 'reset', 'preview', 'saveToAssets', 'rename', 'duplicate', 'delete', 'lock', 'color'],
+    edit: ['run', 'runFromHere', 'reset', 'preview', 'saveToAssets', 'rename', 'duplicate', 'delete', 'lock', 'color'],
 };
 
 // ============================================================================
@@ -204,6 +214,9 @@ export function ActionBar({
             if (actionId === 'color') {
                 action = COLOR_ACTION;
             }
+            if (actionId === 'saveToAssets') {
+                action = SAVE_TO_ASSETS_ACTION;
+            }
 
             if (action) {
                 // Apply state-based modifications
@@ -222,7 +235,7 @@ export function ActionBar({
                 }
 
                 // Disable replace/preview if no results
-                if ((actionId === 'replace' || actionId === 'preview') && !hasResults) {
+                if ((actionId === 'replace' || actionId === 'preview' || actionId === 'saveToAssets') && !hasResults) {
                     modifiedAction.disabled = true;
                     modifiedAction.tooltip = 'No results';
                 }

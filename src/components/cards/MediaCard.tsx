@@ -1,12 +1,13 @@
 'use client';
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, NodeToolbar, Position } from '@xyflow/react';
 import { Image as ImageIcon, Search, X, Plus, Sparkles } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { ActionBar, type ActionId } from '@/components/canvas/ActionBar';
 import { useGraphStore } from '@/store/graphStore';
 import { useSnapshotStore, type OutputSnapshot, type PortKey } from '@/store/snapshotStore';
+import { useRecipeStore } from '@/store/recipeStore';
 
 interface MediaData {
     imageUrl?: string;
@@ -89,10 +90,23 @@ function MediaCardComponent({ id, data, selected }: MediaCardProps) {
     const applyAsset = useCallback((asset: MediaAsset) => {
         if (locked) return;
         updateNodeData(id, { imageUrl: asset.url, source: 'media' });
-        createSnapshot(id, 'imageOut' as PortKey, asset.url);
         setPickerOpen(false);
         setSearch('');
     }, [id, locked, updateNodeData, createSnapshot]);
+
+    const lastEmittedUrlRef = useRef<string>('');
+
+    // Ensure Media node outputs are reconstructed from persisted node data (SnapshotStore is ephemeral).
+    useEffect(() => {
+        if (locked) return;
+        if (!imageUrl) {
+            lastEmittedUrlRef.current = '';
+            return;
+        }
+        if (lastEmittedUrlRef.current === imageUrl) return;
+        lastEmittedUrlRef.current = imageUrl;
+        createSnapshot(id, 'imageOut' as PortKey, imageUrl);
+    }, [id, imageUrl, locked, createSnapshot]);
 
     const handleReset = useCallback(() => {
         if (locked) return;
@@ -100,7 +114,7 @@ function MediaCardComponent({ id, data, selected }: MediaCardProps) {
         resetSnapshots(id, 'imageOut' as PortKey);
     }, [id, locked, updateNodeData, resetSnapshots]);
 
-    const handleAction = useCallback((actionId: ActionId) => {
+    const handleAction = (actionId: ActionId) => {
         switch (actionId) {
             case 'replaceInput':
                 if (!locked) setPickerOpen(true);
@@ -108,7 +122,32 @@ function MediaCardComponent({ id, data, selected }: MediaCardProps) {
             case 'resetInput':
                 handleReset();
                 break;
+            case 'saveToAssets':
+                (async () => {
+                    const projectId = useGraphStore.getState().projectId;
+                    if (!projectId) return;
+                    if (!imageUrl) return;
+
+                    const latestRecipe = useRecipeStore.getState().getLatestRecipe(id);
+                    const recipeId = latestRecipe?.id || 'media';
+
+                    await fetch('/api/posters', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            project_id: projectId,
+                            image_url: imageUrl,
+                            recipe_id: recipeId,
+                            seed: 0,
+                            tags: [],
+                        }),
+                    });
+
+                    window.dispatchEvent(new Event('posterlab:assets-updated'));
+                })();
+                break;
             case 'duplicate': {
+                useGraphStore.getState().pushHistory({ label: 'duplicate' });
                 const nodeToCopy = nodes.find(n => n.id === id);
                 if (!nodeToCopy) return;
                 const newNode = {
@@ -143,7 +182,7 @@ function MediaCardComponent({ id, data, selected }: MediaCardProps) {
             default:
                 break;
         }
-    }, [locked, handleReset, nodes, setNodes, removeNode, toggleNodeLock, id, data.skillName, updateNodeData, cycleColor]);
+    };
 
     return (
         <div className="group/card relative">
@@ -314,4 +353,3 @@ function MediaCardComponent({ id, data, selected }: MediaCardProps) {
 }
 
 export default memo(MediaCardComponent);
-

@@ -9,9 +9,12 @@ import {
 import ThemeToggle from '@/components/layout/ThemeToggle';
 import dynamic from 'next/dynamic';
 import type { Project } from '@/types';
+import type { Poster } from '@/types/poster';
 import { useGraphStore } from '@/store/graphStore';
+import { syncSubscriptionsFromEdges } from '@/store/snapshotStore';
 import Dock from '@/components/canvas/Dock';
 import CommandPalette from '@/components/canvas/CommandPalette';
+import AssetsDrawer from '@/components/canvas/AssetsDrawer';
 import type { InteractionMode } from '@/components/graph/SkillGraphCanvas';
 import type { GroupType } from '@/components/cards/GroupFrame';
 import { useAutoSave, useLoadGraph } from '@/lib/hooks/useAutoSave';
@@ -43,7 +46,15 @@ export default function SpacePage() {
     // Command Palette / Search state
     const [searchOpen, setSearchOpen] = useState(false);
 
+    // PRD v2.1: In-canvas Assets Drawer (Images)
+    const [assetsOpen, setAssetsOpen] = useState(false);
+    const [assetImages, setAssetImages] = useState<Poster[]>([]);
+
     const { addNode, nodes, edges, viewport, setNodes, setEdges } = useGraphStore();
+    const undo = useGraphStore(state => state.undo);
+    const redo = useGraphStore(state => state.redo);
+    const canUndo = useGraphStore(state => state.historyPast.length > 0);
+    const canRedo = useGraphStore(state => state.historyFuture.length > 0);
 
     // PRD v2.0: Load graph on mount
     useLoadGraph(params.id as string | undefined);
@@ -58,7 +69,21 @@ export default function SpacePage() {
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             // Skip if in input/textarea
-            if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+            const el = document.activeElement as HTMLElement | null;
+            if (el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable) return;
+
+            // Undo / Redo
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) redo();
+                else undo();
+                return;
+            }
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'y') {
+                e.preventDefault();
+                redo();
+                return;
+            }
 
             // ⌘K - Search/Command Palette
             if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -101,13 +126,39 @@ export default function SpacePage() {
         };
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, []);
+    }, [redo, undo]);
 
     useEffect(() => {
         if (params.id) {
             fetchSpace(params.id as string);
         }
     }, [params.id]);
+
+    const fetchAssetImages = useCallback(async () => {
+        if (!params.id) return;
+        try {
+            const res = await fetch(`/api/posters?projectId=${params.id}`);
+            const data = await res.json();
+            if (data.success) {
+                setAssetImages(data.data || []);
+            }
+        } catch (error) {
+            console.error('Failed to fetch asset images:', error);
+        }
+    }, [params.id]);
+
+    useEffect(() => {
+        if (!assetsOpen) return;
+        fetchAssetImages();
+    }, [assetsOpen, fetchAssetImages]);
+
+    useEffect(() => {
+        const handler = () => {
+            fetchAssetImages();
+        };
+        window.addEventListener('posterlab:assets-updated', handler);
+        return () => window.removeEventListener('posterlab:assets-updated', handler);
+    }, [fetchAssetImages]);
 
     async function fetchSpace(id: string) {
         try {
@@ -185,8 +236,12 @@ export default function SpacePage() {
             });
 
             // Add imported nodes and edges to existing graph
-            setNodes([...nodes, ...importedNodes as typeof nodes[number][]]);
-            setEdges([...edges, ...importedEdges as typeof edges[number][]]);
+            useGraphStore.getState().pushHistory({ label: 'importTemplate' });
+            const nextNodes = [...nodes, ...importedNodes as typeof nodes[number][]];
+            const nextEdges = [...edges, ...importedEdges as typeof edges[number][]];
+            setNodes(nextNodes);
+            setEdges(nextEdges);
+            syncSubscriptionsFromEdges(nextEdges);
 
             console.log(`[PRD v2.0] Imported ${importedNodes.length} nodes and ${importedEdges.length} edges`);
         } catch (error) {
@@ -276,12 +331,16 @@ export default function SpacePage() {
                     <ThemeToggle />
                     <div className="w-px h-5 bg-[var(--border-subtle)] mx-1" />
                     <button
+                        onClick={undo}
+                        disabled={!canUndo}
                         className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
                         title="Undo (⌘Z)"
                     >
                         <Undo2 size={14} />
                     </button>
                     <button
+                        onClick={redo}
+                        disabled={!canRedo}
                         className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
                         title="Redo (⌘⇧Z)"
                     >
@@ -400,12 +459,23 @@ export default function SpacePage() {
                     />
                 </div>
 
+                {/* Assets Drawer (left) */}
+                <AssetsDrawer
+                    isOpen={assetsOpen}
+                    onToggle={() => setAssetsOpen(o => !o)}
+                    images={assetImages}
+                />
+
                 {/* Dock Toolbar */}
                 <Dock
                     onAddText={handleAddText}
                     onAddImageStudio={handleAddImageStudio}
                     onAddGroup={handleAddGroup}
                     onSearch={handleSearch}
+                    onUndo={undo}
+                    onRedo={redo}
+                    canUndo={canUndo}
+                    canRedo={canRedo}
                     interactionMode={interactionMode}
                     onInteractionModeChange={setInteractionMode}
                 />

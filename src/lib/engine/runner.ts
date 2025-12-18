@@ -307,6 +307,39 @@ async function executeNode(context: ExecutionContext): Promise<ExecutionResult> 
                 };
             }
 
+            case 'edit': {
+                const operation = (node.data.operation as string | undefined) || 'crop';
+                const ratio = (node.data.ratio as string | undefined) || '1:1';
+                const input = context.inputs['imageIn'];
+                const imageUrl = typeof input === 'string' ? input : '';
+
+                if (!imageUrl) {
+                    return {
+                        success: false,
+                        error: 'Missing image input',
+                        duration: Date.now() - startTime,
+                    };
+                }
+
+                if (operation !== 'crop') {
+                    return {
+                        success: false,
+                        error: `Unsupported operation: ${operation}`,
+                        duration: Date.now() - startTime,
+                    };
+                }
+
+                const out = await cropImageUrlToRatio(imageUrl, ratio);
+
+                return {
+                    success: true,
+                    outputs: {
+                        imageOut: out,
+                    } as Record<PortKey, unknown>,
+                    duration: Date.now() - startTime,
+                };
+            }
+
             case 'groupFrame': {
                 // GroupFrame aggregates its children outputs into tokens
                 const groupType = node.data.groupType as string;
@@ -508,6 +541,13 @@ function validateRunnable(node: SkillNode, inputs: Record<string, unknown>, miss
         }
     }
 
+    if (node.type === 'edit') {
+        const img = inputs['imageIn'];
+        if (typeof img !== 'string' || !img.trim()) {
+            return { ok: false, missing: ['image'] };
+        }
+    }
+
     return { ok: true, missing: [] };
 }
 
@@ -537,7 +577,9 @@ export async function runGraph(params: RunGraphParams, options: RunOptions = {})
     }
 
     const runStartNodeId = startNodeId || targetNodeIds[0];
-    const recipeId = createRecipeFromDagRun(mode, runStartNodeId, targetNodeIds);
+    const recipeId = createRecipeFromDagRun(mode, runStartNodeId, targetNodeIds, {
+        projectId: graph.projectId ?? undefined,
+    });
 
     recipeStore.updateRecipeStatus(recipeId, 'running');
     const runStartAt = Date.now();
@@ -744,4 +786,65 @@ async function upscaleImageUrl(url: string, scale: number): Promise<string> {
     const safeScale = Number.isFinite(scale) ? Math.min(8, Math.max(1, scale)) : 2;
     const dataUrl = await ensureDataUrl(url);
     return upscaleDataUrl(dataUrl, safeScale);
+}
+
+function parseRatioValue(ratio: string): number {
+    const trimmed = ratio.trim();
+    const parts = trimmed.split(':').map(Number);
+    if (parts.length === 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1]) && parts[0] > 0 && parts[1] > 0) {
+        return parts[0] / parts[1];
+    }
+    return 1;
+}
+
+function cropDataUrlToRatio(dataUrl: string, ratio: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const targetRatio = parseRatioValue(ratio);
+            const srcW = img.width || 1;
+            const srcH = img.height || 1;
+            const srcRatio = srcW / srcH;
+
+            let sx = 0;
+            let sy = 0;
+            let sw = srcW;
+            let sh = srcH;
+
+            if (srcRatio > targetRatio) {
+                // Crop width
+                sw = Math.max(1, Math.round(srcH * targetRatio));
+                sx = Math.max(0, Math.round((srcW - sw) / 2));
+            } else if (srcRatio < targetRatio) {
+                // Crop height
+                sh = Math.max(1, Math.round(srcW / targetRatio));
+                sy = Math.max(0, Math.round((srcH - sh) / 2));
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = sw;
+            canvas.height = sh;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                reject(new Error('Canvas not supported'));
+                return;
+            }
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+
+            try {
+                resolve(canvas.toDataURL('image/png'));
+            } catch {
+                reject(new Error('Failed to encode image'));
+            }
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = dataUrl;
+    });
+}
+
+async function cropImageUrlToRatio(url: string, ratio: string): Promise<string> {
+    const dataUrl = await ensureDataUrl(url);
+    return cropDataUrlToRatio(dataUrl, ratio);
 }

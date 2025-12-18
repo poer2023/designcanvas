@@ -23,6 +23,7 @@ import { useGraphStore } from '@/store/graphStore';
 import { ActionBar, type ActionId } from '@/components/canvas/ActionBar';
 import { v4 as uuidv4 } from 'uuid';
 import { runGraph } from '@/lib/engine/runner';
+import { useRecipeStore } from '@/store/recipeStore';
 
 
 // State machine states
@@ -261,6 +262,7 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
             case 'replace':
                 // Cycle through candidates by switching active snapshot (Replace creation)
                 if (imageHistory.length > 1) {
+                    useGraphStore.getState().pushHistory({ label: 'replace' });
                     const currentId = activeImageSnapshotId || imageHistory[0].snapshot_id;
                     const currentIndex = Math.max(0, imageHistory.findIndex(s => s.snapshot_id === currentId));
                     const nextIndex = (currentIndex + 1) % imageHistory.length;
@@ -268,6 +270,7 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                 }
                 break;
             case 'reset':
+                useGraphStore.getState().pushHistory({ label: 'reset' });
                 resetSnapshots(id, 'imageOut' as PortKey);
                 setResults([]);
                 setState('empty');
@@ -281,8 +284,36 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                     setShowLightbox(true);
                 }
                 break;
+            case 'saveToAssets':
+                (async () => {
+                    const projectId = useGraphStore.getState().projectId;
+                    if (!projectId) return;
+
+                    const snap = useSnapshotStore.getState().getActiveSnapshot(id, 'imageOut' as PortKey);
+                    const url = snap?.payload;
+                    if (typeof url !== 'string' || !url) return;
+
+                    const latestRecipe = useRecipeStore.getState().getLatestRecipe(id);
+                    const recipeId = latestRecipe?.id || 'local';
+
+                    await fetch('/api/posters', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            project_id: projectId,
+                            image_url: url,
+                            recipe_id: recipeId,
+                            seed: 0,
+                            tags: [],
+                        }),
+                    });
+
+                    window.dispatchEvent(new Event('posterlab:assets-updated'));
+                })();
+                break;
             case 'duplicate':
                 // Duplicate node by copying and offsetting
+                useGraphStore.getState().pushHistory({ label: 'duplicate' });
                 const nodeToCopy = nodes.find(n => n.id === id);
                 if (nodeToCopy) {
                     const newNode = {

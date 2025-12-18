@@ -6,6 +6,8 @@ import { Plus, Layers, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import CreateProjectDialog from '@/components/projects/CreateProjectDialog';
 import type { Project } from '@/types';
 import { useTranslation } from '@/lib/i18n';
+import { getBuiltInSpaceTemplate } from '@/lib/builtInTemplates';
+import { importTemplate } from '@/lib/templateUtils';
 
 export default function SpacesPage() {
   const router = useRouter();
@@ -51,12 +53,58 @@ export default function SpacesPage() {
       });
       const data = await response.json();
       if (data.success) {
-        setSpaces([data.data, ...spaces]);
+        setSpaces(prev => [data.data, ...prev]);
         setShowCreateDialog(false);
         router.push(`/projects/${data.data.id}`);
       }
     } catch (error) {
       console.error('Failed to create space:', error);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleUseTemplate(templateId: string, name: string, description: string) {
+    if (creating) return;
+    setCreating(true);
+
+    try {
+      const template = getBuiltInSpaceTemplate(templateId);
+      if (!template) {
+        setShowCreateDialog(true);
+        return;
+      }
+
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description }),
+      });
+      const data = await response.json();
+      if (!data.success) return;
+
+      const project = data.data as Project;
+      setSpaces(prev => [project, ...prev]);
+
+      const { nodes, edges } = importTemplate(template, {
+        targetViewport: template.graph.viewport || { x: 0, y: 0, zoom: 1 },
+        offsetX: 0,
+        offsetY: 0,
+      });
+
+      await fetch(`/api/projects/${project.id}/graph`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          graph_snapshot: { nodes, edges },
+          viewport: template.graph.viewport || { x: 0, y: 0, zoom: 1 },
+          force: true,
+        }),
+      });
+
+      router.push(`/projects/${project.id}`);
+    } catch (error) {
+      console.error('Failed to create space from template:', error);
     } finally {
       setCreating(false);
     }
@@ -113,7 +161,8 @@ export default function SpacesPage() {
               {templates.map(template => (
                 <button
                   key={template.id}
-                  onClick={() => setShowCreateDialog(true)}
+                  onClick={() => handleUseTemplate(template.id, t(template.nameKey), t(template.descKey))}
+                  disabled={creating}
                   className="
                                         p-4 rounded-xl border border-[var(--border-subtle)]
                                         bg-[var(--bg-card)] hover:bg-[var(--bg-hover)]
