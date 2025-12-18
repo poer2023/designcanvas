@@ -16,7 +16,7 @@ interface OpenRouterRequest {
     model: string;
     messages: {
         role: string;
-        content: string;
+        content: string | ContentPart[];  // Support multimodal content
     }[];
     modalities?: string[];
     max_tokens?: number;
@@ -25,6 +25,11 @@ interface OpenRouterRequest {
         aspect_ratio?: string;
     };
 }
+
+// Content parts for multimodal requests
+type ContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string } };
 
 interface OpenRouterResponse {
     id: string;
@@ -79,13 +84,32 @@ class OpenRouterAdapter implements ProviderAdapter {
                 : Math.floor(Math.random() * 1000000);
 
             const promptWithParams = this.buildPrompt(request.prompt, request.params, seed, modelName);
+            const referenceImages = request.params.reference_images as string[] | undefined;
+
+            // Build content - multimodal if reference images exist
+            let content: string | ContentPart[];
+            if (referenceImages && referenceImages.length > 0) {
+                // Multimodal: text first, then images
+                const parts: ContentPart[] = [
+                    { type: 'text', text: promptWithParams }
+                ];
+                for (const imgUrl of referenceImages) {
+                    parts.push({
+                        type: 'image_url',
+                        image_url: { url: imgUrl }
+                    });
+                }
+                content = parts;
+            } else {
+                content = promptWithParams;
+            }
 
             const body: OpenRouterRequest = {
                 model: modelName,
                 messages: [
                     {
                         role: 'user',
-                        content: promptWithParams,
+                        content,
                     },
                 ],
                 modalities: ['text', 'image'],

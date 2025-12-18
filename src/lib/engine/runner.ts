@@ -16,6 +16,7 @@ import { useGraphStore, SkillNode, SkillEdge } from '@/store/graphStore';
 import { useSnapshotStore, PortKey } from '@/store/snapshotStore';
 import { createRecipeFromDagRun, type RunMode, type SnapshotRef, useRecipeStore } from '@/store/recipeStore';
 import { useSettingsStore } from '@/store/settingsStore';
+import { prepareImagesForApi } from '@/lib/utils/imageUtils';
 
 // =============================================================================
 // Topological Sort
@@ -121,6 +122,182 @@ export interface ExecutionResult {
     duration?: number;
 }
 
+// =============================================================================
+// Classified Inputs for ImageStudio
+// =============================================================================
+
+interface BriefInput {
+    content: string;
+    level: number;  // Topological level for priority (higher = closer to target)
+}
+
+interface ContextInput {
+    prompt?: string;
+    params?: Record<string, unknown>;
+}
+
+interface ClassifiedInputs {
+    briefInputs: BriefInput[];           // TextCard content
+    imageRefs: string[];                 // Reference images
+    contextInput?: ContextInput;         // Upstream context (from contextOut)
+}
+
+/**
+ * Compute topological level for each node (distance from sources)
+ */
+function computeTopologicalLevels(
+    nodes: SkillNode[],
+    edges: SkillEdge[]
+): Map<string, number> {
+    const levels = new Map<string, number>();
+    const inDegree = new Map<string, number>();
+    const adjacencyList = new Map<string, string[]>();
+
+    // Initialize
+    for (const node of nodes) {
+        inDegree.set(node.id, 0);
+        adjacencyList.set(node.id, []);
+        levels.set(node.id, 0);
+    }
+
+    // Build adjacency list and in-degree
+    for (const edge of edges) {
+        adjacencyList.get(edge.source)?.push(edge.target);
+        inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+    }
+
+    // BFS from sources
+    const queue: string[] = [];
+    for (const [nodeId, degree] of inDegree.entries()) {
+        if (degree === 0) {
+            queue.push(nodeId);
+            levels.set(nodeId, 0);
+        }
+    }
+
+    while (queue.length > 0) {
+        const current = queue.shift()!;
+        const currentLevel = levels.get(current) || 0;
+
+        for (const neighbor of adjacencyList.get(current) || []) {
+            const newDegree = (inDegree.get(neighbor) || 0) - 1;
+            inDegree.set(neighbor, newDegree);
+
+            // Update level to max of current paths
+            const neighborLevel = levels.get(neighbor) || 0;
+            levels.set(neighbor, Math.max(neighborLevel, currentLevel + 1));
+
+            if (newDegree === 0) {
+                queue.push(neighbor);
+            }
+        }
+    }
+
+    return levels;
+}
+
+/**
+ * Shuffle array in place (Fisher-Yates)
+ */
+function shuffleArray<T>(array: T[]): T[] {
+    const result = [...array];
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+}
+
+/**
+ * Compile prompt with priority:
+ * 1. Local prompt (highest)
+ * 2. Brief inputs (sorted by level, same level randomized)
+ * 3. Context input (lowest)
+ */
+function compilePromptWithPriority(
+    localPrompt: string,
+    briefInputs: BriefInput[],
+    contextInput?: ContextInput
+): string {
+    const parts: string[] = [];
+
+    // 1. Local prompt (highest priority)
+    if (localPrompt.trim()) {
+        parts.push(localPrompt.trim());
+    }
+
+    // 2. Brief inputs - group by level, shuffle same level, then flatten
+    const byLevel = new Map<number, BriefInput[]>();
+    for (const brief of briefInputs) {
+        const arr = byLevel.get(brief.level) || [];
+        arr.push(brief);
+        byLevel.set(brief.level, arr);
+    }
+
+    // Sort levels descending (higher level = closer to target = higher priority)
+    const sortedLevels = Array.from(byLevel.keys()).sort((a, b) => b - a);
+    for (const level of sortedLevels) {
+        const inputs = shuffleArray(byLevel.get(level) || []);
+        for (const input of inputs) {
+            if (input.content.trim()) {
+                parts.push(input.content.trim());
+            }
+        }
+    }
+
+    // 3. Context input (lowest priority)
+    if (contextInput?.prompt?.trim()) {
+        parts.push(contextInput.prompt.trim());
+    }
+
+    return parts.join('。');
+}
+
+/**
+ * Classify inputs for ImageStudio node
+ */
+function classifyInputsForImageStudio(
+    nodeId: string,
+    inputs: Record<string, unknown>
+): ClassifiedInputs {
+    const snapshotStore = useSnapshotStore.getState();
+    const graphStore = useGraphStore.getState();
+    const subs = snapshotStore.getSubscriptions(nodeId);
+    const levels = computeTopologicalLevels(graphStore.nodes, graphStore.edges);
+
+    const briefInputs: BriefInput[] = [];
+    const imageRefs: string[] = [];
+    let contextInput: ContextInput | undefined;
+
+    for (const sub of subs) {
+        const snapshot = snapshotStore.getSnapshot(sub.producer_id, sub.port_key);
+        if (!snapshot) continue;
+
+        const producerLevel = levels.get(sub.producer_id) || 0;
+
+        if (sub.port_key === 'briefOut') {
+            const content = typeof snapshot.payload === 'string'
+                ? snapshot.payload
+                : String(snapshot.payload || '');
+            if (content.trim()) {
+                briefInputs.push({ content, level: producerLevel });
+            }
+        } else if (sub.port_key === 'imageOut') {
+            const url = typeof snapshot.payload === 'string' ? snapshot.payload : '';
+            if (url) {
+                imageRefs.push(url);
+            }
+        } else if (sub.port_key === 'contextOut') {
+            const ctx = snapshot.payload as ContextInput | undefined;
+            if (ctx) {
+                contextInput = ctx;
+            }
+        }
+    }
+
+    return { briefInputs, imageRefs, contextInput };
+}
+
 function compileTextCardOutput(node: SkillNode): string {
     const role = (node.data.role as string | undefined) || 'notes';
     const content = (node.data.content as string | undefined) || '';
@@ -191,10 +368,11 @@ async function executeNode(context: ExecutionContext): Promise<ExecutionResult> 
 
             case 'imageStudio': {
                 // ImageStudio needs to call the unified generation API (PRD v1.9)
+                // Enhanced with img2img support and multi-input handling
                 const settings = useSettingsStore.getState();
                 const defaults = settings.defaults;
 
-                const prompt = (node.data.prompt as string | undefined) || '';
+                const localPrompt = (node.data.prompt as string | undefined) || '';
                 const cardModelId =
                     (node.data.model_id as string | undefined)
                     || (node.data.model as string | undefined)
@@ -209,10 +387,17 @@ async function executeNode(context: ExecutionContext): Promise<ExecutionResult> 
                 const ratio = (node.data.ratio as string | undefined) || defaults?.default_ratio || '1:1';
                 const resolution = (node.data.resolution as string | undefined) || defaults?.default_resolution || '1K';
                 const count = (node.data.count as number | undefined) || defaults?.default_count || 1;
+                const strength = node.data.strength as number | undefined;
 
-                // Get inputs from context
-                const briefInput = context.inputs['briefIn'] as string | undefined;
-                const compiledPrompt = (briefInput || prompt).trim();
+                // Classify inputs from upstream nodes
+                const classified = classifyInputsForImageStudio(context.nodeId, context.inputs);
+
+                // Compile prompt with priority: local > brief > context
+                const compiledPrompt = compilePromptWithPriority(
+                    localPrompt,
+                    classified.briefInputs,
+                    classified.contextInput
+                );
 
                 if (!compiledPrompt) {
                     return {
@@ -222,15 +407,40 @@ async function executeNode(context: ExecutionContext): Promise<ExecutionResult> 
                     };
                 }
 
+                // Determine mode: img2img if reference images exist
+                const hasReferenceImages = classified.imageRefs.length > 0;
+                const mode = hasReferenceImages ? 'img2img' : 'text2img';
+
+                // Prepare reference images (compress/convert to base64)
+                let referenceImages: string[] = [];
+                if (hasReferenceImages) {
+                    try {
+                        referenceImages = await prepareImagesForApi(classified.imageRefs);
+                    } catch (err) {
+                        console.warn('[Runner] Failed to prepare reference images:', err);
+                        // Continue with original URLs as fallback
+                        referenceImages = classified.imageRefs;
+                    }
+                }
+
+                // Build params
+                const params: Record<string, unknown> = { ratio, resolution, count };
+                if (hasReferenceImages && referenceImages.length > 0) {
+                    params.reference_images = referenceImages;
+                }
+                if (strength !== undefined) {
+                    params.strength = strength;
+                }
+
                 // Call generation API (async job)
                 const response = await fetch('/api/generate/image', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         model_id: effectiveModelId,
-                        mode: 'text2img',
+                        mode,
                         prompt: compiledPrompt,
-                        params: { ratio, resolution, count },
+                        params,
                     }),
                 });
 
@@ -273,7 +483,7 @@ async function executeNode(context: ExecutionContext): Promise<ExecutionResult> 
                             asset_ids: jobResult.assetIds,
                             seeds: jobResult.seeds,
                             prompt: compiledPrompt,
-                            params: { model_id: effectiveModelId, ratio, resolution, count },
+                            params: { model_id: effectiveModelId, ratio, resolution, count, mode },
                             source: 'studio',
                             nodeId: node.id,
                             timestamp: Date.now(),

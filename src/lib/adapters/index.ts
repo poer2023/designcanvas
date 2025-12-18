@@ -12,6 +12,9 @@ export interface GenerationParams {
     cfg?: number;
     style_strength?: number;
     img2img_strength?: number;
+    // img2img support
+    reference_images?: string[];  // Base64 or URL reference images
+    strength?: number;            // img2img strength (0-1, default 0.7)
 }
 
 export interface GenerateRequest {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, memo, useRef, useEffect } from 'react';
+import { useState, useCallback, memo, useRef, useEffect, useMemo } from 'react';
 import { Handle, Position, NodeToolbar } from '@xyflow/react';
 import {
     Sparkles,
@@ -55,6 +55,7 @@ interface ImageStudioData {
     steps?: number;
     styleStrength?: number;
     img2imgStrength?: number;
+    strength?: number;  // img2img strength control (0-1)
     useCurrentAsInput?: boolean;
     results: ImageResult[];
     pinnedId?: string;
@@ -113,12 +114,43 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
     const [results, setResults] = useState<ImageResult[]>(data.results || []);
     const imageHistory = useSnapshotStore(state => state.getSnapshotHistory(id, 'imageOut' as PortKey));
     const activeImageSnapshotId = useSnapshotStore(state => state.activeByProducerPort[`${id}:imageOut`]);
-    const hasBriefInput = useSnapshotStore(state => {
-        const subs = state.getSubscriptions(id);
-        return subs
-            .filter(s => s.port_key === 'briefOut')
-            .some(s => !!state.getSnapshot(s.producer_id, s.port_key));
-    });
+
+    // Detect all input sources - using useMemo to cache selector result
+    const inputSourcesRaw = useSnapshotStore(
+        useCallback((state) => {
+            const subs = state.getSubscriptions(id);
+            let briefCount = 0;
+            let imageCount = 0;
+            let hasContext = false;
+
+            for (const sub of subs) {
+                const hasSnapshot = !!state.getSnapshot(sub.producer_id, sub.port_key);
+                if (!hasSnapshot) continue;
+
+                if (sub.port_key === 'briefOut') briefCount++;
+                else if (sub.port_key === 'imageOut') imageCount++;
+                else if (sub.port_key === 'contextOut') hasContext = true;
+            }
+
+            // Return a stable tuple that can be compared by value
+            return `${briefCount}:${imageCount}:${hasContext}`;
+        }, [id])
+    );
+
+    const inputSources = useMemo(() => {
+        const [briefCount, imageCount, hasContext] = inputSourcesRaw.split(':');
+        return {
+            briefCount: Number(briefCount),
+            imageCount: Number(imageCount),
+            hasContext: hasContext === 'true'
+        };
+    }, [inputSourcesRaw]);
+
+    const hasBriefInput = inputSources.briefCount > 0;
+    const hasImageInput = inputSources.imageCount > 0;
+
+    // Strength control for img2img
+    const [strength, setStrength] = useState(data.strength ?? 0.7);
 
     // Get effective model (with fallback to default)
     const effectiveModelId = modelId || defaults?.default_text2img_model_id || null;
@@ -183,6 +215,7 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                 ratio,
                 resolution,
                 count,
+                strength: hasImageInput ? strength : undefined,
             });
 
             const { results: runResults } = await runGraph({ mode: 'RUN_NODE', startNodeId: id });
@@ -497,12 +530,51 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                     ref={controlsRef}
                     className="absolute bottom-4 left-4 right-4 bg-gray-50/80 backdrop-blur-md rounded-[24px] p-4 border border-gray-100/50 shadow-sm transition-all hover:shadow-md hover:bg-gray-50 z-30"
                 >
+                    {/* Input Sources Indicator */}
+                    {(inputSources.briefCount > 0 || inputSources.imageCount > 0 || inputSources.hasContext) && (
+                        <div className="flex items-center gap-2 mb-3 text-xs text-gray-500">
+                            <span className="text-gray-400">📎 输入源:</span>
+                            {inputSources.imageCount > 0 && (
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                                    🖼️ {inputSources.imageCount}张参考图
+                                </span>
+                            )}
+                            {inputSources.briefCount > 0 && (
+                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
+                                    📝 {inputSources.briefCount}个Notes
+                                </span>
+                            )}
+                            {inputSources.hasContext && (
+                                <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
+                                    ↩️ 继承上游
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Strength Slider - Only show when image reference exists */}
+                    {hasImageInput && (
+                        <div className="flex items-center gap-2 mb-3">
+                            <span className="text-[10px] text-gray-400 w-8">强度</span>
+                            <input
+                                type="range"
+                                min={0}
+                                max={1}
+                                step={0.1}
+                                value={strength}
+                                onChange={(e) => setStrength(Number(e.target.value))}
+                                className="flex-1 h-1 accent-gray-600"
+                            />
+                            <span className="text-[10px] text-gray-500 w-6 text-right">{strength.toFixed(1)}</span>
+                        </div>
+                    )}
+
                     {/* Prompt Input */}
                     <textarea
                         ref={textareaRef}
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        placeholder="描述你想要生成的图像......"
+                        placeholder={(hasBriefInput || hasImageInput) ? "添加补充说明（可选）..." : "描述你想要生成的图像......"}
                         rows={1}
                         className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gray-600 placeholder-gray-300 text-sm resize-none mb-4 py-0 pl-1"
                         style={{ minHeight: '24px', maxHeight: '120px' }}
