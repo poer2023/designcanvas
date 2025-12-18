@@ -78,8 +78,8 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
                     position={Position.Left}
                     className="!absolute !top-0 !left-0 !w-full !h-full !bg-transparent !border-0 !rounded-none !transform-none"
                 />
-                <div className="w-6 h-6 bg-white border border-gray-300 rounded-full shadow-md flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-all duration-200 pointer-events-none group-hover/handle:border-gray-400 group-hover/handle:shadow-lg group-hover/handle:scale-110">
-                    <Plus size={14} className="text-gray-500" />
+                <div className="w-6 h-6 bg-white border border-gray-300 rounded-full shadow-md flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-all duration-200 pointer-events-none group-hover/handle:border-blue-400 group-hover/handle:shadow-lg group-hover/handle:bg-blue-50">
+                    <Plus size={14} className="text-gray-500 group-hover/handle:text-blue-500" />
                 </div>
             </div>
 
@@ -89,7 +89,7 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
                 type="source"
                 position={Position.Right}
                 id="imageOut"
-                className="!w-6 !h-6 !bg-white !border !border-blue-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-blue-400 hover:!shadow-lg hover:!scale-110"
+                className="!w-6 !h-6 !bg-white !border !border-blue-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-blue-500 hover:!shadow-lg hover:!bg-blue-50"
                 style={{ top: '40%', transform: 'translateY(-50%)' }}
             >
                 <ImageIcon size={10} className="text-blue-500 pointer-events-none" />
@@ -99,7 +99,7 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
                 type="source"
                 position={Position.Right}
                 id="contextOut"
-                className="!w-6 !h-6 !bg-white !border !border-purple-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-purple-400 hover:!shadow-lg hover:!scale-110"
+                className="!w-6 !h-6 !bg-white !border !border-purple-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-purple-500 hover:!shadow-lg hover:!bg-purple-50"
                 style={{ top: '60%', transform: 'translateY(-50%)' }}
             >
                 <Sparkles size={10} className="text-purple-500 pointer-events-none" />

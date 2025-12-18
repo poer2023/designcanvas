@@ -132,8 +132,8 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
                     position={Position.Left}
                     className="!absolute !top-0 !left-0 !w-full !h-full !bg-transparent !border-0 !rounded-none !transform-none"
                 />
-                <div className="w-6 h-6 bg-white border border-gray-300 rounded-full shadow-md flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-all duration-200 pointer-events-none group-hover/handle:border-gray-400 group-hover/handle:shadow-lg group-hover/handle:scale-110">
-                    <Plus size={14} className="text-gray-500" />
+                <div className="w-6 h-6 bg-white border border-gray-300 rounded-full shadow-md flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-all duration-200 pointer-events-none group-hover/handle:border-blue-400 group-hover/handle:shadow-lg group-hover/handle:bg-blue-50">
+                    <Plus size={14} className="text-gray-500 group-hover/handle:text-blue-500" />
                 </div>
             </div>
 
@@ -142,7 +142,7 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
                 <Handle
                     type="source"
                     position={Position.Right}
-                    className="!w-6 !h-6 !bg-white !border !border-gray-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-gray-400 hover:!shadow-lg hover:!scale-110"
+                    className="!w-6 !h-6 !bg-white !border !border-gray-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-blue-400 hover:!shadow-lg hover:!bg-blue-50"
                     style={{ top: '50%', transform: 'translateY(-50%)' }}
                 >
                     <Plus size={14} className="text-gray-500 pointer-events-none" />
