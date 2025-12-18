@@ -134,9 +134,9 @@ export default function SpacePage() {
     if (!space) return null;
 
     return (
-        <div className="fixed inset-0 flex flex-col bg-app overflow-hidden">
+        <div className="fixed inset-0 flex flex-col bg-[var(--bg-app)] overflow-hidden">
             {/* Minimal Top Toolbar (per PRD v1.6 Section 3.2) */}
-            <header className="h-10 bg-panel/80 backdrop-blur-sm border-b border-subtle flex items-center justify-between px-3 shrink-0 z-50">
+            <header className="h-10 bg-[var(--bg-panel)] border-b border-[var(--border-subtle)] flex items-center justify-between px-3 shrink-0 z-50">
                 {/* Left: Back + Space Name */}
                 <div className="flex items-center gap-2">
                     <button

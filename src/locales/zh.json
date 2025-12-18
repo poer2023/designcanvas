@@ -1,0 +1,211 @@
+{
+    "common": {
+        "loading": "加载中...",
+        "save": "保存",
+        "cancel": "取消",
+        "create": "创建",
+        "delete": "删除",
+        "edit": "编辑",
+        "close": "关闭",
+        "confirm": "确认",
+        "search": "搜索",
+        "noData": "暂无数据"
+    },
+    "nav": {
+        "workspace": "工作区",
+        "projects": "项目",
+        "assets": "资源",
+        "styles": "风格",
+        "inspiration": "灵感",
+        "gallery": "画廊",
+        "system": "系统",
+        "settings": "设置",
+        "expandSidebar": "展开侧边栏",
+        "collapseSidebar": "收起侧边栏"
+    },
+    "spaces": {
+        "title": "空间",
+        "description": "你的创意工作空间",
+        "newSpace": "新建空间",
+        "createSpace": "创建空间",
+        "noSpaces": "暂无空间",
+        "noSpacesHint": "创建你的第一个空间，或从上方模板开始。",
+        "deleteConfirm": "确定要删除这个空间吗？",
+        "templates": {
+            "title": "从模板开始",
+            "description": "快速启动工作流，激发你的创意"
+        },
+        "recentSpaces": {
+            "title": "最近的空间",
+            "description": "继续之前的工作"
+        },
+        "templateItems": {
+            "posterBatch": {
+                "name": "海报批量",
+                "description": "批量生成海报"
+            },
+            "musicFestival": {
+                "name": "音乐节",
+                "description": "活动海报设计"
+            },
+            "techPromo": {
+                "name": "科技推广",
+                "description": "科技横幅设计"
+            },
+            "socialStory": {
+                "name": "社交故事",
+                "description": "竖版故事格式"
+            }
+        }
+    },
+    "gallery": {
+        "title": "画廊",
+        "posters": "张海报",
+        "poster": "张海报",
+        "favorites": "个收藏",
+        "favorite": "个收藏",
+        "filters": {
+            "all": "全部",
+            "new": "最新",
+            "favorites": "收藏",
+            "rejected": "已拒绝"
+        },
+        "viewModes": {
+            "masonry": "瀑布流",
+            "grid": "网格"
+        },
+        "empty": {
+            "title": "暂无海报",
+            "description": "从项目的技能图谱生成一些海报"
+        },
+        "deleteConfirm": "确定要删除这张海报吗？"
+    },
+    "inspiration": {
+        "title": "灵感",
+        "sets": "个集合",
+        "set": "个集合",
+        "images": "张图片",
+        "image": "张图片",
+        "newSet": "新建集合",
+        "createSet": "创建集合",
+        "searchSets": "搜索集合...",
+        "noSets": "暂无集合",
+        "noMatchingSets": "未找到匹配的集合",
+        "clusters": "个聚类",
+        "selectSet": {
+            "title": "选择一个参考集",
+            "description": "从侧边栏选择一个集合，或创建一个新的来开始收集灵感"
+        },
+        "upload": {
+            "dropHint": "拖拽图片或点击上传",
+            "formats": "支持 JPG, PNG, WebP",
+            "uploading": "上传中..."
+        },
+        "noImages": {
+            "title": "暂无图片",
+            "description": "上传一些参考图片开始使用"
+        },
+        "createDialog": {
+            "title": "新建参考集",
+            "nameLabel": "名称",
+            "namePlaceholder": "例如：夏日音乐节参考"
+        },
+        "alertSelectFirst": "请先选择或创建一个参考集",
+        "dup": "重复"
+    },
+    "settings": {
+        "title": "设置",
+        "description": "配置服务商、模型和偏好设置",
+        "version": "PosterLab v1.9.0 • 模型配置中心",
+        "tabs": {
+            "providers": "服务商",
+            "models": "模型",
+            "defaults": "默认值",
+            "storage": "存储",
+            "appearance": "外观"
+        },
+        "providers": {
+            "title": "服务商",
+            "description": "配置 API 密钥和连接设置",
+            "apiKey": "API 密钥",
+            "configured": "已配置",
+            "enterApiKey": "输入 API 密钥...",
+            "baseUrl": "基础 URL",
+            "testConnection": "测试连接",
+            "status": {
+                "connected": "已连接",
+                "invalidKey": "密钥无效",
+                "noKey": "无密钥",
+                "rateLimited": "请求受限",
+                "unknown": "未知"
+            }
+        },
+        "models": {
+            "title": "模型",
+            "description": "个模型已启用",
+            "addModel": "添加模型",
+            "addModelTitle": "添加新模型",
+            "table": {
+                "enable": "启用",
+                "model": "模型",
+                "provider": "服务商",
+                "capabilities": "能力",
+                "actions": "操作"
+            },
+            "form": {
+                "modelId": "模型 ID",
+                "modelIdPlaceholder": "例如：provider:model-name",
+                "provider": "服务商",
+                "displayName": "显示名称",
+                "displayNamePlaceholder": "例如：SDXL Pro",
+                "remoteModelName": "远程模型名称",
+                "remoteModelNamePlaceholder": "例如：stabilityai/sdxl",
+                "capabilities": "能力"
+            },
+            "createModel": "创建模型",
+            "allFieldsRequired": "所有字段必填",
+            "createFailed": "创建模型失败"
+        },
+        "defaults": {
+            "title": "默认值",
+            "description": "新生成任务的默认设置",
+            "text2imgModel": "文生图模型",
+            "img2imgModel": "图生图模型",
+            "aspectRatio": "宽高比",
+            "resolution": "分辨率",
+            "imageCount": "生成数量",
+            "saved": "已保存！",
+            "saveDefaults": "保存默认值"
+        },
+        "storage": {
+            "title": "存储",
+            "description": "管理缓存数据和存储空间",
+            "cacheData": "缓存数据",
+            "posters": "海报",
+            "recipes": "配方",
+            "refsets": "参考集",
+            "clearAll": "清除所有缓存",
+            "clearConfirm": "确定要清除所有缓存数据吗？此操作无法撤销。"
+        },
+        "appearance": {
+            "title": "外观",
+            "description": "自定义外观和风格",
+            "theme": "主题",
+            "themeDesc": "选择你喜欢的配色方案",
+            "themes": {
+                "light": "浅色",
+                "dark": "深色",
+                "system": "跟随系统"
+            },
+            "language": "语言",
+            "languageDesc": "选择你喜欢的语言"
+        }
+    },
+    "createProject": {
+        "title": "创建空间",
+        "nameLabel": "名称",
+        "namePlaceholder": "我的精彩项目",
+        "descLabel": "描述",
+        "descPlaceholder": "这个空间是关于什么的？"
+    }
+}

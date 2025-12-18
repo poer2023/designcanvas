@@ -38,6 +38,12 @@ export interface GenerateResult {
     metadata?: Record<string, unknown>;
 }
 
+export interface GenerateRequestWithAuth extends GenerateRequest {
+    _auth?: {
+        apiKey: string;
+    };
+}
+
 export interface TestResult {
     ok: boolean;
     message: string;

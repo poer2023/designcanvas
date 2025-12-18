@@ -5,13 +5,7 @@ import { Star, X, Image as ImageIcon, Loader2, Sparkles, Grid3X3, LayoutGrid } f
 import type { Poster, PosterStatus } from '@/types/poster';
 import PosterCard from '@/components/gallery/PosterCard';
 import PosterDetail from '@/components/gallery/PosterDetail';
-
-const STATUS_FILTERS: { value: PosterStatus | 'all'; label: string; icon?: React.ReactNode; color?: string }[] = [
-    { value: 'all', label: 'All' },
-    { value: 'generated', label: 'New', icon: <Sparkles size={14} />, color: 'blue' },
-    { value: 'favorite', label: 'Favorites', icon: <Star size={14} />, color: 'amber' },
-    { value: 'rejected', label: 'Rejected', icon: <X size={14} />, color: 'red' },
-];
+import { useTranslation } from '@/lib/i18n';
 
 export default function GalleryPage() {
     const [posters, setPosters] = useState<Poster[]>([]);
@@ -19,6 +13,14 @@ export default function GalleryPage() {
     const [statusFilter, setStatusFilter] = useState<PosterStatus | 'all'>('all');
     const [selectedPoster, setSelectedPoster] = useState<Poster | null>(null);
     const [viewMode, setViewMode] = useState<'grid' | 'masonry'>('masonry');
+    const { t } = useTranslation();
+
+    const STATUS_FILTERS: { value: PosterStatus | 'all'; labelKey: string; icon?: React.ReactNode; color?: string }[] = [
+        { value: 'all', labelKey: 'gallery.filters.all' },
+        { value: 'generated', labelKey: 'gallery.filters.new', icon: <Sparkles size={14} />, color: 'blue' },
+        { value: 'favorite', labelKey: 'gallery.filters.favorites', icon: <Star size={14} />, color: 'amber' },
+        { value: 'rejected', labelKey: 'gallery.filters.rejected', icon: <X size={14} />, color: 'red' },
+    ];
 
     useEffect(() => {
         fetchPosters();
@@ -66,7 +68,7 @@ export default function GalleryPage() {
     }
 
     async function handleDelete(posterId: string) {
-        if (!confirm('Are you sure you want to delete this poster?')) return;
+        if (!confirm(t('gallery.deleteConfirm'))) return;
 
         try {
             const response = await fetch(`/api/posters/${posterId}`, {
@@ -99,26 +101,26 @@ export default function GalleryPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-6">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-1">Gallery</h1>
+                    <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-1">{t('gallery.title')}</h1>
                     <p className="text-sm text-[var(--text-secondary)]">
-                        {stats.total} poster{stats.total !== 1 ? 's' : ''} • {stats.favorites} favorite{stats.favorites !== 1 ? 's' : ''}
+                        {stats.total} {stats.total !== 1 ? t('gallery.posters') : t('gallery.poster')} • {stats.favorites} {stats.favorites !== 1 ? t('gallery.favorites') : t('gallery.favorite')}
                     </p>
                 </div>
 
                 <div className="flex items-center gap-3">
                     {/* View Toggle */}
-                    <div className="flex items-center bg-[var(--bg-hover)] rounded-lg p-1">
+                    <div className="flex items-center bg-[var(--bg-panel)] rounded-lg border border-[var(--border-subtle)] p-1">
                         <button
                             onClick={() => setViewMode('masonry')}
-                            className={`p-1.5 rounded-md transition-colors ${viewMode === 'masonry' ? 'bg-[var(--bg-panel)] shadow-sm' : 'text-[var(--text-tertiary)]'}`}
-                            title="Masonry"
+                            className={`p-1.5 rounded-md transition-colors ${viewMode === 'masonry' ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'}`}
+                            title={t('gallery.viewModes.masonry')}
                         >
                             <Grid3X3 size={16} />
                         </button>
                         <button
                             onClick={() => setViewMode('grid')}
-                            className={`p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-[var(--bg-panel)] shadow-sm' : 'text-[var(--text-tertiary)]'}`}
-                            title="Grid"
+                            className={`p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-[var(--bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'}`}
+                            title={t('gallery.viewModes.grid')}
                         >
                             <LayoutGrid size={16} />
                         </button>
@@ -133,12 +135,12 @@ export default function GalleryPage() {
                                 className={`
                   flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all
                   ${statusFilter === filter.value
-                                        ? 'bg-[var(--accent-subtle)] text-[var(--accent-primary)]'
+                                        ? 'bg-[var(--accent-primary)] text-white shadow-sm'
                                         : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'}
                 `}
                             >
                                 {filter.icon}
-                                <span>{filter.label}</span>
+                                <span>{t(filter.labelKey)}</span>
                             </button>
                         ))}
                     </div>
@@ -155,9 +157,9 @@ export default function GalleryPage() {
                     <div className="w-16 h-16 rounded-2xl bg-[var(--bg-hover)] flex items-center justify-center text-[var(--text-tertiary)] mb-4">
                         <ImageIcon size={28} />
                     </div>
-                    <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">No posters yet</h3>
+                    <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">{t('gallery.empty.title')}</h3>
                     <p className="text-sm text-[var(--text-secondary)] max-w-sm">
-                        Generate some posters from your project&apos;s Skill Graph
+                        {t('gallery.empty.description')}
                     </p>
                 </div>
             ) : viewMode === 'masonry' ? (

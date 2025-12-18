@@ -12,35 +12,38 @@ import {
     PanelLeft
 } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
+import LanguageToggle from './LanguageToggle';
 import Logo from './Logo';
 import { useSidebar } from '@/components/providers/SidebarProvider';
-
-const navItems = [
-    {
-        section: 'Workspace',
-        items: [
-            { name: 'Projects', href: '/', icon: LayoutGrid },
-        ],
-    },
-    {
-        section: 'Assets',
-        items: [
-            { name: 'Styles', href: '/styles', icon: Palette },
-            { name: 'Inspiration', href: '/inspiration', icon: Lightbulb },
-            { name: 'Gallery', href: '/gallery', icon: Album },
-        ],
-    },
-    {
-        section: 'System',
-        items: [
-            { name: 'Settings', href: '/settings', icon: Settings },
-        ],
-    },
-];
+import { useTranslation } from '@/lib/i18n';
 
 export default function Sidebar() {
     const pathname = usePathname();
     const { isCollapsed, toggle } = useSidebar();
+    const { t } = useTranslation();
+
+    const navItems = [
+        {
+            section: t('nav.workspace'),
+            items: [
+                { name: t('nav.projects'), href: '/', icon: LayoutGrid },
+            ],
+        },
+        {
+            section: t('nav.assets'),
+            items: [
+                { name: t('nav.styles'), href: '/styles', icon: Palette },
+                { name: t('nav.inspiration'), href: '/inspiration', icon: Lightbulb },
+                { name: t('nav.gallery'), href: '/gallery', icon: Album },
+            ],
+        },
+        {
+            section: t('nav.system'),
+            items: [
+                { name: t('nav.settings'), href: '/settings', icon: Settings },
+            ],
+        },
+    ];
 
     return (
         <aside
@@ -131,11 +134,12 @@ export default function Sidebar() {
                 )}
 
                 <div className={`flex items-center ${isCollapsed ? 'flex-col gap-2' : 'gap-1'}`}>
+                    <LanguageToggle />
                     <ThemeToggle />
                     <button
                         onClick={toggle}
                         className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
-                        title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                        title={isCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
                     >
                         {isCollapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
                     </button>

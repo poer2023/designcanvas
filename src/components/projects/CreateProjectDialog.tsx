@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X, FolderPlus, Loader2 } from 'lucide-react';
+import { useTranslation } from '@/lib/i18n';
 
 interface CreateProjectDialogProps {
     open: boolean;
@@ -18,6 +19,7 @@ export default function CreateProjectDialog({
 }: CreateProjectDialogProps) {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
+    const { t } = useTranslation();
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -50,8 +52,7 @@ export default function CreateProjectDialog({
                             <FolderPlus size={20} className="text-white" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-semibold text-[var(--text-primary)]">New Project</h2>
-                            <p className="text-xs text-[var(--text-tertiary)]">Create a new poster design project</p>
+                            <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('createProject.title')}</h2>
                         </div>
                     </div>
                     <button
@@ -66,13 +67,13 @@ export default function CreateProjectDialog({
                 <form onSubmit={handleSubmit} className="p-5 space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
-                            Project Name
+                            {t('createProject.nameLabel')}
                         </label>
                         <input
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder="My Awesome Poster"
+                            placeholder={t('createProject.namePlaceholder')}
                             className="
                                 w-full h-11 px-4 rounded-lg
                                 bg-[var(--bg-input)] border border-[var(--border-default)]
@@ -87,12 +88,12 @@ export default function CreateProjectDialog({
 
                     <div>
                         <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
-                            Description <span className="text-[var(--text-tertiary)] font-normal">(optional)</span>
+                            {t('createProject.descLabel')}
                         </label>
                         <textarea
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            placeholder="Describe your project..."
+                            placeholder={t('createProject.descPlaceholder')}
                             rows={3}
                             className="
                                 w-full px-4 py-3 rounded-lg resize-none
@@ -117,7 +118,7 @@ export default function CreateProjectDialog({
                                 transition-colors
                             "
                         >
-                            Cancel
+                            {t('common.cancel')}
                         </button>
                         <button
                             type="submit"
@@ -134,10 +135,10 @@ export default function CreateProjectDialog({
                             {loading ? (
                                 <>
                                     <Loader2 size={16} className="animate-spin" />
-                                    <span>Creating...</span>
+                                    <span>{t('common.loading')}</span>
                                 </>
                             ) : (
-                                'Create Project'
+                                t('common.create')
                             )}
                         </button>
                     </div>

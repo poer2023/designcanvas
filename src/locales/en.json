@@ -1,0 +1,211 @@
+{
+    "common": {
+        "loading": "Loading...",
+        "save": "Save",
+        "cancel": "Cancel",
+        "create": "Create",
+        "delete": "Delete",
+        "edit": "Edit",
+        "close": "Close",
+        "confirm": "Confirm",
+        "search": "Search",
+        "noData": "No data"
+    },
+    "nav": {
+        "workspace": "Workspace",
+        "projects": "Projects",
+        "assets": "Assets",
+        "styles": "Styles",
+        "inspiration": "Inspiration",
+        "gallery": "Gallery",
+        "system": "System",
+        "settings": "Settings",
+        "expandSidebar": "Expand sidebar",
+        "collapseSidebar": "Collapse sidebar"
+    },
+    "spaces": {
+        "title": "Spaces",
+        "description": "Your creative workspaces",
+        "newSpace": "New Space",
+        "createSpace": "Create Space",
+        "noSpaces": "No spaces yet",
+        "noSpacesHint": "Create your first space or start from a template above.",
+        "deleteConfirm": "Are you sure you want to delete this space?",
+        "templates": {
+            "title": "Start with a Template",
+            "description": "Quick start workflows to jumpstart your creativity"
+        },
+        "recentSpaces": {
+            "title": "Recent Spaces",
+            "description": "Pick up where you left off"
+        },
+        "templateItems": {
+            "posterBatch": {
+                "name": "Poster Batch",
+                "description": "Batch generate posters"
+            },
+            "musicFestival": {
+                "name": "Music Festival",
+                "description": "Event poster design"
+            },
+            "techPromo": {
+                "name": "Tech Promo",
+                "description": "Tech banner design"
+            },
+            "socialStory": {
+                "name": "Social Story",
+                "description": "Vertical story format"
+            }
+        }
+    },
+    "gallery": {
+        "title": "Gallery",
+        "posters": "posters",
+        "poster": "poster",
+        "favorites": "favorites",
+        "favorite": "favorite",
+        "filters": {
+            "all": "All",
+            "new": "New",
+            "favorites": "Favorites",
+            "rejected": "Rejected"
+        },
+        "viewModes": {
+            "masonry": "Masonry",
+            "grid": "Grid"
+        },
+        "empty": {
+            "title": "No posters yet",
+            "description": "Generate some posters from your project's Skill Graph"
+        },
+        "deleteConfirm": "Are you sure you want to delete this poster?"
+    },
+    "inspiration": {
+        "title": "Inspiration",
+        "sets": "sets",
+        "set": "set",
+        "images": "images",
+        "image": "image",
+        "newSet": "New Set",
+        "createSet": "Create Set",
+        "searchSets": "Search sets...",
+        "noSets": "No sets yet",
+        "noMatchingSets": "No matching sets",
+        "clusters": "clusters",
+        "selectSet": {
+            "title": "Select a Reference Set",
+            "description": "Choose a set from the sidebar or create a new one to start collecting inspiration"
+        },
+        "upload": {
+            "dropHint": "Drop images or click to upload",
+            "formats": "JPG, PNG, WebP",
+            "uploading": "Uploading..."
+        },
+        "noImages": {
+            "title": "No images yet",
+            "description": "Upload some reference images to get started"
+        },
+        "createDialog": {
+            "title": "New Reference Set",
+            "nameLabel": "Name",
+            "namePlaceholder": "e.g. Summer Festival References"
+        },
+        "alertSelectFirst": "Please select or create a RefSet first",
+        "dup": "Dup"
+    },
+    "settings": {
+        "title": "Settings",
+        "description": "Configure providers, models, and preferences",
+        "version": "PosterLab v1.9.0 • Model Configuration Center",
+        "tabs": {
+            "providers": "Providers",
+            "models": "Models",
+            "defaults": "Defaults",
+            "storage": "Storage",
+            "appearance": "Appearance"
+        },
+        "providers": {
+            "title": "Providers",
+            "description": "Configure API keys and connection settings",
+            "apiKey": "API Key",
+            "configured": "Configured",
+            "enterApiKey": "Enter API key...",
+            "baseUrl": "Base URL",
+            "testConnection": "Test Connection",
+            "status": {
+                "connected": "Connected",
+                "invalidKey": "Invalid Key",
+                "noKey": "No Key",
+                "rateLimited": "Rate Limited",
+                "unknown": "Unknown"
+            }
+        },
+        "models": {
+            "title": "Models",
+            "description": "models enabled",
+            "addModel": "Add Model",
+            "addModelTitle": "Add New Model",
+            "table": {
+                "enable": "Enable",
+                "model": "Model",
+                "provider": "Provider",
+                "capabilities": "Capabilities",
+                "actions": "Actions"
+            },
+            "form": {
+                "modelId": "Model ID",
+                "modelIdPlaceholder": "e.g. provider:model-name",
+                "provider": "Provider",
+                "displayName": "Display Name",
+                "displayNamePlaceholder": "e.g. SDXL Pro",
+                "remoteModelName": "Remote Model Name",
+                "remoteModelNamePlaceholder": "e.g. stabilityai/sdxl",
+                "capabilities": "Capabilities"
+            },
+            "createModel": "Create Model",
+            "allFieldsRequired": "All fields are required",
+            "createFailed": "Failed to create model"
+        },
+        "defaults": {
+            "title": "Defaults",
+            "description": "Default settings for new generations",
+            "text2imgModel": "Text-to-Image Model",
+            "img2imgModel": "Image-to-Image Model",
+            "aspectRatio": "Aspect Ratio",
+            "resolution": "Resolution",
+            "imageCount": "Image Count",
+            "saved": "Saved!",
+            "saveDefaults": "Save Defaults"
+        },
+        "storage": {
+            "title": "Storage",
+            "description": "Manage cached data and storage",
+            "cacheData": "Cached Data",
+            "posters": "Posters",
+            "recipes": "Recipes",
+            "refsets": "Reference Sets",
+            "clearAll": "Clear All Cache",
+            "clearConfirm": "Are you sure you want to clear all cached data? This cannot be undone."
+        },
+        "appearance": {
+            "title": "Appearance",
+            "description": "Customize the look and feel",
+            "theme": "Theme",
+            "themeDesc": "Choose your preferred color scheme",
+            "themes": {
+                "light": "Light",
+                "dark": "Dark",
+                "system": "System"
+            },
+            "language": "Language",
+            "languageDesc": "Choose your preferred language"
+        }
+    },
+    "createProject": {
+        "title": "Create Space",
+        "nameLabel": "Name",
+        "namePlaceholder": "My awesome project",
+        "descLabel": "Description",
+        "descPlaceholder": "What is this space about?"
+    }
+}

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Upload, Trash2, Grid3X3, Image as ImageIcon, Folder, Check, X, Loader2, Search, Sparkles } from 'lucide-react';
 import type { RefSet, RefSetItem } from '@/types/refset';
+import { useTranslation } from '@/lib/i18n';
 
 export default function InspirationPage() {
     const [refsets, setRefsets] = useState<RefSet[]>([]);
@@ -13,6 +14,7 @@ export default function InspirationPage() {
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [dragActive, setDragActive] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const { t } = useTranslation();
 
     useEffect(() => {
         fetchRefsets();
@@ -83,7 +85,7 @@ export default function InspirationPage() {
         setDragActive(false);
 
         if (!selectedRefset) {
-            alert('Please select or create a RefSet first');
+            alert(t('inspiration.alertSelectFirst'));
             return;
         }
 
@@ -93,7 +95,7 @@ export default function InspirationPage() {
 
         if (files.length === 0) return;
         await handleUploadFiles(files);
-    }, [selectedRefset]);
+    }, [selectedRefset, t]);
 
     const handleUploadFiles = async (files: File[]) => {
         if (!selectedRefset) return;
@@ -147,9 +149,9 @@ export default function InspirationPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-1">Inspiration</h1>
+                    <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-1">{t('inspiration.title')}</h1>
                     <p className="text-sm text-[var(--text-secondary)]">
-                        {refsets.length} set{refsets.length !== 1 ? 's' : ''} • {totalImages} image{totalImages !== 1 ? 's' : ''}
+                        {refsets.length} {refsets.length !== 1 ? t('inspiration.sets') : t('inspiration.set')} • {totalImages} {totalImages !== 1 ? t('inspiration.images') : t('inspiration.image')}
                     </p>
                 </div>
                 <button
@@ -163,7 +165,7 @@ export default function InspirationPage() {
                     onClick={() => setShowCreateDialog(true)}
                 >
                     <Plus size={16} />
-                    <span>New Set</span>
+                    <span>{t('inspiration.newSet')}</span>
                 </button>
             </div>
 
@@ -176,13 +178,13 @@ export default function InspirationPage() {
                                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
                                 <input
                                     type="text"
-                                    placeholder="Search sets..."
+                                    placeholder={t('inspiration.searchSets')}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="
-                    w-full h-8 pl-8 pr-3 rounded-lg
-                    bg-[var(--bg-input)] border border-[var(--border-subtle)]
-                    text-xs text-[var(--text-primary)]
+                    w-full h-9 pl-9 pr-3 rounded-lg
+                    bg-[var(--bg-input)] border border-[var(--border-default)]
+                    text-sm text-[var(--text-primary)]
                     placeholder:text-[var(--text-tertiary)]
                     focus:outline-none focus:border-[var(--accent-primary)]
                   "
@@ -199,7 +201,7 @@ export default function InspirationPage() {
                                 <div className="text-center py-8">
                                     <Folder size={28} className="mx-auto mb-2 text-[var(--text-tertiary)] opacity-50" />
                                     <p className="text-xs text-[var(--text-tertiary)]">
-                                        {searchQuery ? 'No matching sets' : 'No sets yet'}
+                                        {searchQuery ? t('inspiration.noMatchingSets') : t('inspiration.noSets')}
                                     </p>
                                 </div>
                             ) : (
@@ -220,8 +222,8 @@ export default function InspirationPage() {
                                                 <span className="text-sm font-medium text-[var(--text-primary)] truncate">{refset.name}</span>
                                             </div>
                                             <div className="text-[11px] text-[var(--text-tertiary)]">
-                                                {refset.item_count} images
-                                                {refset.cluster_count > 0 && ` • ${refset.cluster_count} clusters`}
+                                                {refset.item_count} {t('inspiration.images')}
+                                                {refset.cluster_count > 0 && ` • ${refset.cluster_count} ${t('inspiration.clusters')}`}
                                             </div>
                                         </button>
                                     ))}
@@ -258,13 +260,13 @@ export default function InspirationPage() {
                                 {uploading ? (
                                     <div className="flex items-center justify-center gap-2 text-[var(--text-secondary)]">
                                         <Loader2 className="animate-spin" size={18} />
-                                        <span className="text-sm">Uploading...</span>
+                                        <span className="text-sm">{t('inspiration.upload.uploading')}</span>
                                     </div>
                                 ) : (
                                     <>
                                         <Upload size={24} className="mx-auto text-[var(--text-tertiary)] mb-2" />
-                                        <p className="text-sm text-[var(--text-secondary)]">Drop images or click to upload</p>
-                                        <p className="text-[11px] text-[var(--text-tertiary)] mt-1">JPG, PNG, WebP</p>
+                                        <p className="text-sm text-[var(--text-secondary)]">{t('inspiration.upload.dropHint')}</p>
+                                        <p className="text-[11px] text-[var(--text-tertiary)] mt-1">{t('inspiration.upload.formats')}</p>
                                     </>
                                 )}
                             </div>
@@ -276,8 +278,8 @@ export default function InspirationPage() {
                                         <div className="w-14 h-14 rounded-2xl bg-[var(--bg-hover)] flex items-center justify-center text-[var(--text-tertiary)] mb-3">
                                             <ImageIcon size={24} />
                                         </div>
-                                        <h3 className="text-sm font-medium text-[var(--text-primary)] mb-1">No images yet</h3>
-                                        <p className="text-xs text-[var(--text-secondary)]">Upload some reference images to get started</p>
+                                        <h3 className="text-sm font-medium text-[var(--text-primary)] mb-1">{t('inspiration.noImages.title')}</h3>
+                                        <p className="text-xs text-[var(--text-secondary)]">{t('inspiration.noImages.description')}</p>
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
@@ -309,7 +311,7 @@ export default function InspirationPage() {
                                                 {/* Badges */}
                                                 {item.is_duplicate && (
                                                     <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-amber-500 text-white text-[9px] font-medium">
-                                                        Dup
+                                                        {t('inspiration.dup')}
                                                     </div>
                                                 )}
                                                 {item.cluster_id !== undefined && (
@@ -328,9 +330,9 @@ export default function InspirationPage() {
                             <div className="w-16 h-16 rounded-2xl bg-[var(--bg-hover)] flex items-center justify-center text-[var(--text-tertiary)] mb-4">
                                 <Sparkles size={28} />
                             </div>
-                            <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">Select a Reference Set</h3>
+                            <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">{t('inspiration.selectSet.title')}</h3>
                             <p className="text-sm text-[var(--text-secondary)] max-w-xs mb-4">
-                                Choose a set from the sidebar or create a new one to start collecting inspiration
+                                {t('inspiration.selectSet.description')}
                             </p>
                             <button
                                 className="
@@ -344,7 +346,7 @@ export default function InspirationPage() {
                                 onClick={() => setShowCreateDialog(true)}
                             >
                                 <Plus size={14} />
-                                Create Set
+                                {t('inspiration.createSet')}
                             </button>
                         </div>
                     )}
@@ -370,6 +372,7 @@ function CreateRefsetDialog({
     onCreate: (name: string) => void;
 }) {
     const [name, setName] = useState('');
+    const { t } = useTranslation();
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -396,7 +399,7 @@ function CreateRefsetDialog({
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-orange-400 flex items-center justify-center">
                             <Sparkles size={20} className="text-white" />
                         </div>
-                        <h2 className="text-lg font-semibold text-[var(--text-primary)]">New Reference Set</h2>
+                        <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('inspiration.createDialog.title')}</h2>
                     </div>
                     <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
                         <X size={18} />
@@ -406,7 +409,7 @@ function CreateRefsetDialog({
                 <form onSubmit={handleSubmit}>
                     <div className="mb-5">
                         <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
-                            Name
+                            {t('inspiration.createDialog.nameLabel')}
                         </label>
                         <input
                             type="text"
@@ -417,7 +420,7 @@ function CreateRefsetDialog({
                 placeholder:text-[var(--text-tertiary)]
                 focus:outline-none focus:border-[var(--accent-primary)] focus:ring-2 focus:ring-[var(--accent-subtle)]
               "
-                            placeholder="e.g. Summer Festival References"
+                            placeholder={t('inspiration.createDialog.namePlaceholder')}
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             autoFocus
@@ -434,7 +437,7 @@ function CreateRefsetDialog({
                 transition-colors
               "
                         >
-                            Cancel
+                            {t('common.cancel')}
                         </button>
                         <button
                             type="submit"
@@ -447,7 +450,7 @@ function CreateRefsetDialog({
                 transition-colors
               "
                         >
-                            Create
+                            {t('common.create')}
                         </button>
                     </div>
                 </form>

@@ -12,6 +12,10 @@ import { extractProviderId, type GenerateRequest, type GenerationParams } from '
 
 // Import mock adapter to ensure it's registered
 import '@/lib/adapters/mock';
+// Import real adapters
+import '@/lib/adapters/openrouter';
+import '@/lib/adapters/cloudflare';
+import '@/lib/adapters/huggingface';
 
 interface RequestBody {
     request_id?: string;
@@ -113,8 +117,8 @@ async function processGeneration(jobId: string, body: RequestBody, apiKey: strin
             throw new Error(`No adapter found for provider: ${providerId}`);
         }
 
-        // Build request
-        const generateRequest: GenerateRequest = {
+        // Build request with auth
+        const generateRequest = {
             request_id: body.request_id || uuidv4(),
             model_id: body.model_id,
             mode: body.mode || 'text2img',
@@ -123,6 +127,7 @@ async function processGeneration(jobId: string, body: RequestBody, apiKey: strin
             params: body.params || {},
             inputs: body.inputs,
             context: body.context,
+            _auth: { apiKey },  // Inject API key for adapter
         };
 
         // Generate images

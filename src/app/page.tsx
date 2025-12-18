@@ -2,17 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Layers, Sparkles, Loader2, Trash2, MoreHorizontal } from 'lucide-react';
+import { Plus, Layers, Sparkles, Loader2, Trash2 } from 'lucide-react';
 import CreateProjectDialog from '@/components/projects/CreateProjectDialog';
 import type { Project } from '@/types';
-
-// Simple template data
-const templates = [
-  { id: 'poster-batch', name: 'Poster Batch', description: 'Batch generate posters', tags: ['general', 'multi-poster'] },
-  { id: 'music-festival', name: 'Music Festival', description: 'Event poster design', tags: ['music', 'festival'] },
-  { id: 'tech-promo', name: 'Tech Promo', description: 'Tech banner design', tags: ['tech', 'promo'] },
-  { id: 'social-story', name: 'Social Story', description: 'Vertical story format', tags: ['social', 'story'] },
-];
+import { useTranslation } from '@/lib/i18n';
 
 export default function SpacesPage() {
   const router = useRouter();
@@ -20,6 +13,15 @@ export default function SpacesPage() {
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [creating, setCreating] = useState(false);
+  const { t } = useTranslation();
+
+  // Template data with translation keys
+  const templates = [
+    { id: 'poster-batch', nameKey: 'spaces.templateItems.posterBatch.name', descKey: 'spaces.templateItems.posterBatch.description', tags: ['general', 'multi-poster'] },
+    { id: 'music-festival', nameKey: 'spaces.templateItems.musicFestival.name', descKey: 'spaces.templateItems.musicFestival.description', tags: ['music', 'festival'] },
+    { id: 'tech-promo', nameKey: 'spaces.templateItems.techPromo.name', descKey: 'spaces.templateItems.techPromo.description', tags: ['tech', 'promo'] },
+    { id: 'social-story', nameKey: 'spaces.templateItems.socialStory.name', descKey: 'spaces.templateItems.socialStory.description', tags: ['social', 'story'] },
+  ];
 
   useEffect(() => {
     fetchSpaces();
@@ -61,7 +63,7 @@ export default function SpacesPage() {
   }
 
   async function handleDeleteSpace(id: string) {
-    if (!confirm('Are you sure you want to delete this space?')) return;
+    if (!confirm(t('spaces.deleteConfirm'))) return;
 
     try {
       await fetch(`/api/projects/${id}`, { method: 'DELETE' });
@@ -74,10 +76,10 @@ export default function SpacesPage() {
   return (
     <>
       {/* Header - matching Settings page style */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-1">Spaces</h1>
-          <p className="text-sm text-[var(--text-secondary)]">Your creative workspaces</p>
+          <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-1">{t('spaces.title')}</h1>
+          <p className="text-sm text-[var(--text-secondary)]">{t('spaces.description')}</p>
         </div>
         <button
           onClick={() => setShowCreateDialog(true)}
@@ -90,7 +92,7 @@ export default function SpacesPage() {
                     "
         >
           <Plus size={16} />
-          New Space
+          {t('spaces.newSpace')}
         </button>
       </div>
 
@@ -102,8 +104,8 @@ export default function SpacesPage() {
               <Sparkles size={16} className="text-violet-500" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">Start with a Template</h2>
-              <p className="text-xs text-[var(--text-tertiary)]">Quick start workflows to jumpstart your creativity</p>
+              <h2 className="text-sm font-semibold text-[var(--text-primary)]">{t('spaces.templates.title')}</h2>
+              <p className="text-xs text-[var(--text-tertiary)]">{t('spaces.templates.description')}</p>
             </div>
           </div>
           <div className="p-5">
@@ -120,10 +122,10 @@ export default function SpacesPage() {
                                     "
                 >
                   <div className="font-medium text-sm text-[var(--text-primary)] mb-1 group-hover:text-[var(--accent-primary)]">
-                    {template.name}
+                    {t(template.nameKey)}
                   </div>
                   <div className="text-xs text-[var(--text-tertiary)] mb-3">
-                    {template.description}
+                    {t(template.descKey)}
                   </div>
                   <div className="flex gap-1 flex-wrap">
                     {template.tags.map(tag => (
@@ -149,12 +151,12 @@ export default function SpacesPage() {
             </div>
             <div>
               <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                Recent Spaces
+                {t('spaces.recentSpaces.title')}
                 <span className="ml-2 px-1.5 py-0.5 rounded-md bg-[var(--bg-hover)] text-xs font-medium text-[var(--text-tertiary)]">
                   {spaces.length}
                 </span>
               </h2>
-              <p className="text-xs text-[var(--text-tertiary)]">Pick up where you left off</p>
+              <p className="text-xs text-[var(--text-tertiary)]">{t('spaces.recentSpaces.description')}</p>
             </div>
           </div>
           <div className="p-5">
@@ -167,9 +169,9 @@ export default function SpacesPage() {
                 <div className="w-12 h-12 rounded-xl bg-[var(--bg-hover)] flex items-center justify-center mx-auto mb-4">
                   <Layers size={24} className="text-[var(--text-tertiary)]" />
                 </div>
-                <h3 className="font-medium text-[var(--text-primary)] mb-2">No spaces yet</h3>
+                <h3 className="font-medium text-[var(--text-primary)] mb-2">{t('spaces.noSpaces')}</h3>
                 <p className="text-sm text-[var(--text-tertiary)] mb-4">
-                  Create your first space or start from a template above.
+                  {t('spaces.noSpacesHint')}
                 </p>
                 <button
                   onClick={() => setShowCreateDialog(true)}
@@ -180,7 +182,7 @@ export default function SpacesPage() {
                                         transition-colors
                                     "
                 >
-                  Create Space
+                  {t('spaces.createSpace')}
                 </button>
               </div>
             ) : (

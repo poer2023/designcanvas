@@ -5,8 +5,10 @@ import {
     Settings as SettingsIcon, Database, Trash2, Key, Palette, RefreshCw,
     Check, Moon, Sun, Monitor, Plus, Cpu, Zap, Eye, EyeOff,
     TestTube2, Loader2, ChevronDown, ChevronRight, AlertCircle,
-    ToggleLeft, ToggleRight, Pencil, X, Save
+    ToggleLeft, ToggleRight, Pencil, X, Save, Globe
 } from 'lucide-react';
+import { useTranslation } from '@/lib/i18n';
+import { useLanguageStore } from '@/store/languageStore';
 
 // Types
 interface Provider {
@@ -58,6 +60,7 @@ export default function SettingsPage() {
     const [defaults, setDefaults] = useState<AppDefaults | null>(null);
     const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const { t } = useTranslation();
 
     useEffect(() => {
         loadData();
@@ -140,19 +143,19 @@ export default function SettingsPage() {
     }
 
     const tabs = [
-        { id: 'providers' as TabType, label: 'Providers', icon: Key },
-        { id: 'models' as TabType, label: 'Models', icon: Cpu },
-        { id: 'defaults' as TabType, label: 'Defaults', icon: SettingsIcon },
-        { id: 'storage' as TabType, label: 'Storage', icon: Database },
-        { id: 'appearance' as TabType, label: 'Appearance', icon: Palette },
+        { id: 'providers' as TabType, labelKey: 'settings.tabs.providers', icon: Key },
+        { id: 'models' as TabType, labelKey: 'settings.tabs.models', icon: Cpu },
+        { id: 'defaults' as TabType, labelKey: 'settings.tabs.defaults', icon: SettingsIcon },
+        { id: 'storage' as TabType, labelKey: 'settings.tabs.storage', icon: Database },
+        { id: 'appearance' as TabType, labelKey: 'settings.tabs.appearance', icon: Palette },
     ];
 
     return (
         <>
             {/* Header */}
             <div className="mb-6">
-                <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-1">Settings</h1>
-                <p className="text-sm text-[var(--text-secondary)]">Configure providers, models, and preferences</p>
+                <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-1">{t('settings.title')}</h1>
+                <p className="text-sm text-[var(--text-secondary)]">{t('settings.description')}</p>
             </div>
 
             {/* Tab Navigation */}
@@ -170,7 +173,7 @@ export default function SettingsPage() {
                         `}
                     >
                         <tab.icon size={16} />
-                        {tab.label}
+                        {t(tab.labelKey)}
                     </button>
                 ))}
             </div>
@@ -216,7 +219,7 @@ export default function SettingsPage() {
 
             {/* Info Footer */}
             <div className="text-center text-xs text-[var(--text-tertiary)] py-8 mt-8">
-                <p>PosterLab v1.9.0 • Model Configuration Center</p>
+                <p>{t('settings.version')}</p>
             </div>
         </>
     );
@@ -224,12 +227,14 @@ export default function SettingsPage() {
 
 // ===================== PROVIDERS TAB =====================
 function ProvidersTab({ providers, onUpdate }: { providers: Provider[]; onUpdate: () => void }) {
+    const { t } = useTranslation();
+
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h2 className="text-lg font-semibold text-[var(--text-primary)]">Providers</h2>
-                    <p className="text-sm text-[var(--text-tertiary)]">Configure API keys and connection settings</p>
+                    <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('settings.providers.title')}</h2>
+                    <p className="text-sm text-[var(--text-tertiary)]">{t('settings.providers.description')}</p>
                 </div>
             </div>
 
@@ -252,6 +257,7 @@ function ProviderCard({ provider, onUpdate }: { provider: Provider; onUpdate: ()
     const [saving, setSaving] = useState(false);
     const [testing, setTesting] = useState(false);
     const [testResult, setTestResult] = useState<{ status: string; message: string } | null>(null);
+    const { t } = useTranslation();
 
     const statusColors: Record<string, string> = {
         ok: 'bg-green-500',
@@ -261,12 +267,12 @@ function ProviderCard({ provider, onUpdate }: { provider: Provider; onUpdate: ()
         unknown: 'bg-gray-500',
     };
 
-    const statusLabels: Record<string, string> = {
-        ok: 'Connected',
-        invalid: 'Invalid Key',
-        missing: 'No Key',
-        rate_limited: 'Rate Limited',
-        unknown: 'Unknown',
+    const statusLabelKeys: Record<string, string> = {
+        ok: 'settings.providers.status.connected',
+        invalid: 'settings.providers.status.invalidKey',
+        missing: 'settings.providers.status.noKey',
+        rate_limited: 'settings.providers.status.rateLimited',
+        unknown: 'settings.providers.status.unknown',
     };
 
     async function saveApiKey() {
@@ -323,7 +329,7 @@ function ProviderCard({ provider, onUpdate }: { provider: Provider; onUpdate: ()
                     <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${statusColors[provider.last_test_status]}`} />
                         <span className="text-xs text-[var(--text-secondary)]">
-                            {statusLabels[provider.last_test_status]}
+                            {t(statusLabelKeys[provider.last_test_status])}
                         </span>
                     </div>
                     {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -335,14 +341,14 @@ function ProviderCard({ provider, onUpdate }: { provider: Provider; onUpdate: ()
                     {/* API Key Input */}
                     <div>
                         <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">
-                            API Key {provider.has_api_key && <span className="text-green-500">(Configured)</span>}
+                            {t('settings.providers.apiKey')} {provider.has_api_key && <span className="text-green-500">({t('settings.providers.configured')})</span>}
                         </label>
                         <div className="flex gap-2">
                             <input
                                 type="password"
                                 value={apiKey}
                                 onChange={(e) => setApiKey(e.target.value)}
-                                placeholder={provider.has_api_key ? '••••••••' : 'Enter API key...'}
+                                placeholder={provider.has_api_key ? '••••••••' : t('settings.providers.enterApiKey')}
                                 className="
                                     flex-1 h-10 px-3 rounded-lg
                                     bg-[var(--bg-input)] border border-[var(--border-default)]
@@ -363,7 +369,7 @@ function ProviderCard({ provider, onUpdate }: { provider: Provider; onUpdate: ()
                                 "
                             >
                                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                                Save
+                                {t('common.save')}
                             </button>
                         </div>
                     </div>
@@ -371,7 +377,7 @@ function ProviderCard({ provider, onUpdate }: { provider: Provider; onUpdate: ()
                     {/* Base URL */}
                     {provider.base_url && (
                         <div>
-                            <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">Base URL</label>
+                            <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">{t('settings.providers.baseUrl')}</label>
                             <div className="text-sm text-[var(--text-secondary)] font-mono bg-[var(--bg-input)] px-3 py-2 rounded-lg">
                                 {provider.base_url}
                             </div>
@@ -393,7 +399,7 @@ function ProviderCard({ provider, onUpdate }: { provider: Provider; onUpdate: ()
                             "
                         >
                             {testing ? <Loader2 size={14} className="animate-spin" /> : <TestTube2 size={14} />}
-                            Test Connection
+                            {t('settings.providers.testConnection')}
                         </button>
                         {testResult && (
                             <div className={`text-sm ${testResult.status === 'ok' ? 'text-green-500' : 'text-red-500'}`}>
@@ -410,6 +416,7 @@ function ProviderCard({ provider, onUpdate }: { provider: Provider; onUpdate: ()
 // ===================== MODELS TAB =====================
 function ModelsTab({ models, providers, onUpdate }: { models: Model[]; providers: Provider[]; onUpdate: () => void }) {
     const [showAddForm, setShowAddForm] = useState(false);
+    const { t } = useTranslation();
 
     const getProviderName = useCallback((providerId: string) => {
         return providers.find(p => p.provider_id === providerId)?.display_name || providerId;
@@ -419,9 +426,9 @@ function ModelsTab({ models, providers, onUpdate }: { models: Model[]; providers
         <div className="space-y-4">
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h2 className="text-lg font-semibold text-[var(--text-primary)]">Models</h2>
+                    <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('settings.models.title')}</h2>
                     <p className="text-sm text-[var(--text-tertiary)]">
-                        {models.filter(m => m.is_enabled).length} of {models.length} models enabled
+                        {models.filter(m => m.is_enabled).length} / {models.length} {t('settings.models.description')}
                     </p>
                 </div>
                 <button
@@ -434,7 +441,7 @@ function ModelsTab({ models, providers, onUpdate }: { models: Model[]; providers
                     "
                 >
                     <Plus size={14} />
-                    Add Model
+                    {t('settings.models.addModel')}
                 </button>
             </div>
 
@@ -454,19 +461,19 @@ function ModelsTab({ models, providers, onUpdate }: { models: Model[]; providers
                     <thead>
                         <tr className="border-b border-[var(--border-subtle)]">
                             <th className="px-4 py-3 text-left text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
-                                Enable
+                                {t('settings.models.table.enable')}
                             </th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
-                                Model
+                                {t('settings.models.table.model')}
                             </th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
-                                Provider
+                                {t('settings.models.table.provider')}
                             </th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
-                                Capabilities
+                                {t('settings.models.table.capabilities')}
                             </th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
-                                Actions
+                                {t('settings.models.table.actions')}
                             </th>
                         </tr>
                     </thead>
@@ -570,11 +577,12 @@ function AddModelForm({ providers, onClose, onSuccess }: {
     });
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const { t } = useTranslation();
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         if (!form.model_id || !form.display_name || !form.remote_model_name) {
-            setError('All fields are required');
+            setError(t('settings.models.allFieldsRequired'));
             return;
         }
 
@@ -592,10 +600,10 @@ function AddModelForm({ providers, onClose, onSuccess }: {
             if (data.success) {
                 onSuccess();
             } else {
-                setError(data.error || 'Failed to create model');
+                setError(data.error || t('settings.models.createFailed'));
             }
         } catch {
-            setError('Failed to create model');
+            setError(t('settings.models.createFailed'));
         } finally {
             setSaving(false);
         }
@@ -613,7 +621,7 @@ function AddModelForm({ providers, onClose, onSuccess }: {
     return (
         <div className="bg-[var(--bg-panel)] border border-[var(--border-subtle)] rounded-xl p-5 mb-4">
             <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium text-[var(--text-primary)]">Add New Model</h3>
+                <h3 className="font-medium text-[var(--text-primary)]">{t('settings.models.addModelTitle')}</h3>
                 <button onClick={onClose} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
                     <X size={18} />
                 </button>
@@ -622,12 +630,12 @@ function AddModelForm({ providers, onClose, onSuccess }: {
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">Model ID</label>
+                        <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">{t('settings.models.form.modelId')}</label>
                         <input
                             type="text"
                             value={form.model_id}
                             onChange={(e) => setForm({ ...form, model_id: e.target.value })}
-                            placeholder="e.g. provider:model-name"
+                            placeholder={t('settings.models.form.modelIdPlaceholder')}
                             className="
                                 w-full h-10 px-3 rounded-lg
                                 bg-[var(--bg-input)] border border-[var(--border-default)]
@@ -637,7 +645,7 @@ function AddModelForm({ providers, onClose, onSuccess }: {
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">Provider</label>
+                        <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">{t('settings.models.form.provider')}</label>
                         <select
                             value={form.provider_id}
                             onChange={(e) => setForm({ ...form, provider_id: e.target.value })}
@@ -657,12 +665,12 @@ function AddModelForm({ providers, onClose, onSuccess }: {
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">Display Name</label>
+                        <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">{t('settings.models.form.displayName')}</label>
                         <input
                             type="text"
                             value={form.display_name}
                             onChange={(e) => setForm({ ...form, display_name: e.target.value })}
-                            placeholder="e.g. SDXL Pro"
+                            placeholder={t('settings.models.form.displayNamePlaceholder')}
                             className="
                                 w-full h-10 px-3 rounded-lg
                                 bg-[var(--bg-input)] border border-[var(--border-default)]
@@ -672,12 +680,12 @@ function AddModelForm({ providers, onClose, onSuccess }: {
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">Remote Model Name</label>
+                        <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">{t('settings.models.form.remoteModelName')}</label>
                         <input
                             type="text"
                             value={form.remote_model_name}
                             onChange={(e) => setForm({ ...form, remote_model_name: e.target.value })}
-                            placeholder="e.g. stabilityai/sdxl"
+                            placeholder={t('settings.models.form.remoteModelNamePlaceholder')}
                             className="
                                 w-full h-10 px-3 rounded-lg
                                 bg-[var(--bg-input)] border border-[var(--border-default)]
@@ -689,7 +697,7 @@ function AddModelForm({ providers, onClose, onSuccess }: {
                 </div>
 
                 <div>
-                    <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">Capabilities</label>
+                    <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">{t('settings.models.form.capabilities')}</label>
                     <div className="flex gap-2">
                         {(['text2img', 'img2img', 'vision'] as const).map(cap => (
                             <button
@@ -728,7 +736,7 @@ function AddModelForm({ providers, onClose, onSuccess }: {
                             hover:bg-[var(--bg-hover)]
                         "
                     >
-                        Cancel
+                        {t('common.cancel')}
                     </button>
                     <button
                         type="submit"
@@ -742,7 +750,7 @@ function AddModelForm({ providers, onClose, onSuccess }: {
                         "
                     >
                         {saving && <Loader2 size={14} className="animate-spin" />}
-                        Create Model
+                        {t('settings.models.createModel')}
                     </button>
                 </div>
             </form>
@@ -765,6 +773,7 @@ function DefaultsTab({ defaults, models, onUpdate }: {
     });
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
+    const { t } = useTranslation();
 
     useEffect(() => {
         if (defaults) {
@@ -794,8 +803,8 @@ function DefaultsTab({ defaults, models, onUpdate }: {
     return (
         <div className="space-y-6">
             <div className="mb-4">
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Defaults</h2>
-                <p className="text-sm text-[var(--text-tertiary)]">Default settings for new generations</p>
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('settings.defaults.title')}</h2>
+                <p className="text-sm text-[var(--text-tertiary)]">{t('settings.defaults.description')}</p>
             </div>
 
             <div className="bg-[var(--bg-panel)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-5">
@@ -803,7 +812,7 @@ function DefaultsTab({ defaults, models, onUpdate }: {
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">
-                            Default Text-to-Image Model
+                            {t('settings.defaults.text2imgModel')}
                         </label>
                         <select
                             value={form.default_text2img_model_id || ''}
@@ -823,7 +832,7 @@ function DefaultsTab({ defaults, models, onUpdate }: {
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">
-                            Default Image-to-Image Model
+                            {t('settings.defaults.img2imgModel')}
                         </label>
                         <select
                             value={form.default_img2img_model_id || ''}
@@ -847,7 +856,7 @@ function DefaultsTab({ defaults, models, onUpdate }: {
                 <div className="grid grid-cols-3 gap-4">
                     <div>
                         <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">
-                            Default Ratio
+                            {t('settings.defaults.aspectRatio')}
                         </label>
                         <select
                             value={form.default_ratio}
@@ -868,7 +877,7 @@ function DefaultsTab({ defaults, models, onUpdate }: {
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">
-                            Default Resolution
+                            {t('settings.defaults.resolution')}
                         </label>
                         <select
                             value={form.default_resolution}
@@ -887,7 +896,7 @@ function DefaultsTab({ defaults, models, onUpdate }: {
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1.5">
-                            Default Count
+                            {t('settings.defaults.imageCount')}
                         </label>
                         <select
                             value={form.default_count}
@@ -926,7 +935,7 @@ function DefaultsTab({ defaults, models, onUpdate }: {
                         ) : (
                             <Save size={14} />
                         )}
-                        {saved ? 'Saved!' : 'Save Defaults'}
+                        {saved ? t('settings.defaults.saved') : t('settings.defaults.saveDefaults')}
                     </button>
                 </div>
             </div>
@@ -937,9 +946,10 @@ function DefaultsTab({ defaults, models, onUpdate }: {
 // ===================== STORAGE TAB =====================
 function StorageTab({ cacheStats, onRefresh }: { cacheStats: CacheStats | null; onRefresh: () => void }) {
     const [clearing, setClearing] = useState(false);
+    const { t } = useTranslation();
 
     async function clearCache(type: 'all' | 'posters' | 'elements' | 'recipes') {
-        if (!confirm(`Are you sure you want to clear ${type === 'all' ? 'all cached data' : type}?`)) return;
+        if (!confirm(t('settings.storage.clearConfirm'))) return;
 
         setClearing(true);
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -951,8 +961,8 @@ function StorageTab({ cacheStats, onRefresh }: { cacheStats: CacheStats | null; 
     return (
         <div className="space-y-4">
             <div className="mb-4">
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Storage</h2>
-                <p className="text-sm text-[var(--text-tertiary)]">Manage cached data</p>
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('settings.storage.title')}</h2>
+                <p className="text-sm text-[var(--text-tertiary)]">{t('settings.storage.description')}</p>
             </div>
 
             <div className="bg-[var(--bg-panel)] border border-[var(--border-subtle)] rounded-xl p-5">
@@ -960,14 +970,16 @@ function StorageTab({ cacheStats, onRefresh }: { cacheStats: CacheStats | null; 
                     <>
                         <div className="grid grid-cols-4 gap-3 mb-4">
                             {[
-                                { label: 'Posters', value: cacheStats.posters },
+                                { labelKey: 'settings.storage.posters', value: cacheStats.posters },
                                 { label: 'Elements', value: cacheStats.elements },
-                                { label: 'Recipes', value: cacheStats.recipes },
-                                { label: 'RefSets', value: cacheStats.refsets },
-                            ].map(({ label, value }) => (
-                                <div key={label} className="bg-[var(--bg-input)] rounded-lg p-3 text-center">
-                                    <div className="text-xl font-semibold text-[var(--text-primary)]">{value}</div>
-                                    <div className="text-[10px] text-[var(--text-tertiary)]">{label}</div>
+                                { labelKey: 'settings.storage.recipes', value: cacheStats.recipes },
+                                { labelKey: 'settings.storage.refsets', value: cacheStats.refsets },
+                            ].map((item, idx) => (
+                                <div key={idx} className="bg-[var(--bg-input)] rounded-lg p-3 text-center">
+                                    <div className="text-xl font-semibold text-[var(--text-primary)]">{item.value}</div>
+                                    <div className="text-[10px] text-[var(--text-tertiary)]">
+                                        {item.labelKey ? t(item.labelKey) : item.label}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -985,7 +997,7 @@ function StorageTab({ cacheStats, onRefresh }: { cacheStats: CacheStats | null; 
                                 "
                             >
                                 <Trash2 size={14} />
-                                Clear All Cache
+                                {t('settings.storage.clearAll')}
                             </button>
                             <button
                                 onClick={onRefresh}
@@ -1014,21 +1026,26 @@ function StorageTab({ cacheStats, onRefresh }: { cacheStats: CacheStats | null; 
 
 // ===================== APPEARANCE TAB =====================
 function AppearanceTab() {
+    const { t } = useTranslation();
+    const { language, setLanguage } = useLanguageStore();
+
     return (
         <div className="space-y-4">
             <div className="mb-4">
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">Appearance</h2>
-                <p className="text-sm text-[var(--text-tertiary)]">Theme and display preferences</p>
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t('settings.appearance.title')}</h2>
+                <p className="text-sm text-[var(--text-tertiary)]">{t('settings.appearance.description')}</p>
             </div>
 
+            {/* Theme */}
             <div className="bg-[var(--bg-panel)] border border-[var(--border-subtle)] rounded-xl p-5">
-                <label className="text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Theme</label>
+                <label className="text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">{t('settings.appearance.theme')}</label>
+                <p className="text-xs text-[var(--text-tertiary)] mb-2">{t('settings.appearance.themeDesc')}</p>
                 <div className="flex gap-2 mt-2">
                     {[
-                        { value: 'light', icon: Sun, label: 'Light' },
-                        { value: 'dark', icon: Moon, label: 'Dark' },
-                        { value: 'system', icon: Monitor, label: 'System' },
-                    ].map(({ value, icon: Icon, label }) => (
+                        { value: 'light', icon: Sun, labelKey: 'settings.appearance.themes.light' },
+                        { value: 'dark', icon: Moon, labelKey: 'settings.appearance.themes.dark' },
+                        { value: 'system', icon: Monitor, labelKey: 'settings.appearance.themes.system' },
+                    ].map(({ value, icon: Icon, labelKey }) => (
                         <button
                             key={value}
                             className="
@@ -1040,9 +1057,45 @@ function AppearanceTab() {
                             "
                         >
                             <Icon size={16} />
-                            <span>{label}</span>
+                            <span>{t(labelKey)}</span>
                         </button>
                     ))}
+                </div>
+            </div>
+
+            {/* Language */}
+            <div className="bg-[var(--bg-panel)] border border-[var(--border-subtle)] rounded-xl p-5">
+                <label className="text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">{t('settings.appearance.language')}</label>
+                <p className="text-xs text-[var(--text-tertiary)] mb-2">{t('settings.appearance.languageDesc')}</p>
+                <div className="flex gap-2 mt-2">
+                    <button
+                        onClick={() => setLanguage('en')}
+                        className={`
+                            flex-1 h-10 rounded-lg border flex items-center justify-center gap-2
+                            text-sm font-medium transition-colors
+                            ${language === 'en'
+                                ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)]'
+                                : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                            }
+                        `}
+                    >
+                        <Globe size={16} />
+                        <span>English</span>
+                    </button>
+                    <button
+                        onClick={() => setLanguage('zh')}
+                        className={`
+                            flex-1 h-10 rounded-lg border flex items-center justify-center gap-2
+                            text-sm font-medium transition-colors
+                            ${language === 'zh'
+                                ? 'bg-[var(--accent-primary)] text-white border-[var(--accent-primary)]'
+                                : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
+                            }
+                        `}
+                    >
+                        <Globe size={16} />
+                        <span>中文</span>
+                    </button>
                 </div>
             </div>
         </div>
