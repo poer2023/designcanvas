@@ -6,9 +6,7 @@ import {
     LayoutGrid,
     Palette,
     Lightbulb,
-    Puzzle,
     Album,
-    Zap,
     Settings,
     PanelLeftClose,
     PanelLeft
@@ -29,14 +27,12 @@ const navItems = [
         items: [
             { name: 'Styles', href: '/styles', icon: Palette },
             { name: 'Inspiration', href: '/inspiration', icon: Lightbulb },
-            { name: 'Elements', href: '/elements', icon: Puzzle },
             { name: 'Gallery', href: '/gallery', icon: Album },
         ],
     },
     {
         section: 'System',
         items: [
-            { name: 'Skills', href: '/skills', icon: Zap },
             { name: 'Settings', href: '/settings', icon: Settings },
         ],
     },

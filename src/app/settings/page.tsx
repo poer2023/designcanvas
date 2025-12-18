@@ -115,16 +115,14 @@ export default function SettingsPage() {
 
     async function fetchCacheStats() {
         try {
-            const [postersRes, elementsRes, recipesRes, refsetsRes] = await Promise.all([
+            const [postersRes, recipesRes, refsetsRes] = await Promise.all([
                 fetch('/api/posters'),
-                fetch('/api/elements'),
                 fetch('/api/recipes'),
                 fetch('/api/refsets'),
             ]);
 
-            const [postersData, elementsData, recipesData, refsetsData] = await Promise.all([
+            const [postersData, recipesData, refsetsData] = await Promise.all([
                 postersRes.json(),
-                elementsRes.json(),
                 recipesRes.json(),
                 refsetsRes.json(),
             ]);
@@ -132,7 +130,7 @@ export default function SettingsPage() {
             setCacheStats({
                 projects: 0,
                 posters: postersData.meta?.total || postersData.data?.length || 0,
-                elements: elementsData.meta?.total || elementsData.data?.length || 0,
+                elements: 0,
                 recipes: recipesData.meta?.total || recipesData.data?.length || 0,
                 refsets: refsetsData.data?.length || 0,
             });
