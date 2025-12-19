@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# SQLite database files
+data/posterlab.db
+data/posterlab.db-shm
+data/posterlab.db-wal
