@@ -149,6 +149,63 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
     const hasBriefInput = inputSources.briefCount > 0;
     const hasImageInput = inputSources.imageCount > 0;
 
+    // Get upstream brief content from connected TextCards
+    const upstreamBriefContent = useSnapshotStore(
+        useCallback((state) => {
+            const subs = state.getSubscriptions(id);
+            const briefContents: string[] = [];
+
+            for (const sub of subs) {
+                if (sub.port_key === 'briefOut') {
+                    const snapshot = state.getSnapshot(sub.producer_id, sub.port_key);
+                    if (snapshot && typeof snapshot.payload === 'string' && snapshot.payload.trim()) {
+                        briefContents.push(snapshot.payload.trim());
+                    }
+                }
+            }
+
+            return briefContents.join('。');
+        }, [id])
+    );
+
+    // Get upstream image URL from connected image sources (for img2img)
+    const upstreamImageUrl = useSnapshotStore(
+        useCallback((state) => {
+            const subs = state.getSubscriptions(id);
+
+            for (const sub of subs) {
+                if (sub.port_key === 'imageOut') {
+                    const snapshot = state.getSnapshot(sub.producer_id, sub.port_key);
+                    if (snapshot) {
+                        const payload = snapshot.payload;
+                        // Handle string URL format (from hydration or direct URL storage)
+                        if (typeof payload === 'string') {
+                            if (payload.startsWith('http') || payload.startsWith('data:') || payload.startsWith('/')) {
+                                return payload;
+                            }
+                        }
+                        // Handle object format (from runtime operations like paste/drop)
+                        if (typeof payload === 'object' && payload !== null) {
+                            if ('imageUrl' in payload) {
+                                const url = (payload as { imageUrl: string }).imageUrl;
+                                if (typeof url === 'string' && url) return url;
+                            }
+                            // Handle array format (from batch generation)
+                            if ('images' in payload && Array.isArray((payload as { images: unknown[] }).images)) {
+                                const images = (payload as { images: string[] }).images;
+                                if (images.length > 0 && typeof images[0] === 'string') {
+                                    return images[0];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return '';
+        }, [id])
+    );
+
     // Strength control for img2img
     const [strength, setStrength] = useState(data.strength ?? 0.7);
 
@@ -197,8 +254,8 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
     const { height: contentHeight } = getContentDimensions();
     const contentReservedHeight = controlsHeight + 16 + 16;
 
-    // Check if can run
-    const canRun = Boolean((prompt.trim() || hasBriefInput) && effectiveModelId && !isModelDisabled && !isModelMissing);
+    // Check if can run - allow with local prompt, upstream brief, OR upstream image (img2img)
+    const canRun = Boolean((prompt.trim() || hasBriefInput || hasImageInput) && effectiveModelId && !isModelDisabled && !isModelMissing);
 
     const handleRun = useCallback(async () => {
         if (!canRun || !effectiveModelId) return;
@@ -540,7 +597,17 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                     {(inputSources.briefCount > 0 || inputSources.imageCount > 0 || inputSources.hasContext) && (
                         <div className="flex items-center gap-2 mb-3 text-xs text-gray-500">
                             <span className="text-gray-400">📎 输入源:</span>
-                            {inputSources.imageCount > 0 && (
+                            {inputSources.imageCount > 0 && upstreamImageUrl && (
+                                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                                    <img
+                                        src={upstreamImageUrl}
+                                        alt="参考图"
+                                        className="w-5 h-5 rounded object-cover border border-blue-200"
+                                    />
+                                    <span>🖼️ 参考图</span>
+                                </div>
+                            )}
+                            {inputSources.imageCount > 0 && !upstreamImageUrl && (
                                 <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
                                     🖼️ {inputSources.imageCount}张参考图
                                 </span>
@@ -576,15 +643,38 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                     )}
 
                     {/* Prompt Input */}
-                    <textarea
-                        ref={textareaRef}
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        placeholder={(hasBriefInput || hasImageInput) ? "添加补充说明（可选）..." : "描述你想要生成的图像......"}
-                        rows={1}
-                        className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gray-600 placeholder-gray-300 text-sm resize-none mb-4 py-0 pl-1"
-                        style={{ minHeight: '24px', maxHeight: '120px' }}
-                    />
+                    {/* Show upstream content when no local prompt and has brief input */}
+                    {!prompt.trim() && upstreamBriefContent ? (
+                        <div className="relative mb-4">
+                            <div
+                                className="w-full text-green-600 text-sm py-0 pl-1 cursor-text"
+                                style={{ minHeight: '24px' }}
+                                onClick={() => textareaRef.current?.focus()}
+                            >
+                                <span className="opacity-70">📝 </span>
+                                {upstreamBriefContent}
+                            </div>
+                            <textarea
+                                ref={textareaRef}
+                                value={prompt}
+                                onChange={(e) => setPrompt(e.target.value)}
+                                placeholder="添加补充说明（可选）..."
+                                rows={1}
+                                className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gray-600 placeholder-gray-300 text-sm resize-none py-0 pl-1 mt-2"
+                                style={{ minHeight: '24px', maxHeight: '120px' }}
+                            />
+                        </div>
+                    ) : (
+                        <textarea
+                            ref={textareaRef}
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            placeholder={(hasBriefInput || hasImageInput) ? "添加补充说明（可选）..." : "描述你想要生成的图像......"}
+                            rows={1}
+                            className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gray-600 placeholder-gray-300 text-sm resize-none mb-4 py-0 pl-1"
+                            style={{ minHeight: '24px', maxHeight: '120px' }}
+                        />
+                    )}
 
                     {/* Control Row */}
                     <div className="flex items-center gap-1.5 relative z-20">

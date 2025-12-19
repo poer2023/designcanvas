@@ -446,6 +446,7 @@ function TextCardComponent({ id, data, selected }: TextCardProps) {
             <Handle
                 type="source"
                 position={Position.Right}
+                id="briefOut"
                 className="!w-6 !h-6 !bg-white !border !border-gray-300 !rounded-full !shadow-md !-right-6 opacity-0 group-hover/card:opacity-100 transition-all duration-200 !flex !items-center !justify-center hover:!border-blue-400 hover:!shadow-lg hover:!bg-blue-50"
                 style={{ top: '50%', transform: 'translateY(-50%)' }}
             >
