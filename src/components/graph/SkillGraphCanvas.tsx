@@ -343,15 +343,63 @@ function SkillGraphCanvasInner({
         (event: React.DragEvent) => {
             event.preventDefault();
 
-            const skillType = event.dataTransfer.getData('application/skilltype');
-            if (!skillType) return;
-
-            const skillDataRaw = event.dataTransfer.getData('application/skilldata');
-
+            // Get drop position
             const position = screenToFlowPosition({
                 x: event.clientX,
                 y: event.clientY,
             });
+
+            // Check for external image files first (drag from Finder/Explorer)
+            const files = event.dataTransfer.files;
+            if (files.length > 0) {
+                const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+                if (imageFiles.length > 0) {
+                    pushHistory({ label: 'dropImages' });
+
+                    // Process each image file
+                    imageFiles.forEach((file, index) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const imageUrl = e.target?.result as string;
+
+                            // Offset each subsequent image
+                            const offsetPosition = {
+                                x: position.x + (index * 50),
+                                y: position.y + (index * 50),
+                            };
+
+                            // Create raw ImageCard
+                            const newNode: SkillNode = {
+                                id: uuidv4(),
+                                type: 'imageCard',
+                                position: offsetPosition,
+                                data: {
+                                    skillId: 'imageCard',
+                                    skillName: file.name || 'Image',
+                                    skillType: 'imageCard',
+                                    params: {},
+                                    status: 'idle',
+                                    locked: false,
+                                    mode: 'raw',
+                                    imageUrl,
+                                    source: 'drop',
+                                },
+                            };
+
+                            setNodesRef.current([...nodesRef.current, newNode]);
+                            console.log(`[PRD v1.8] Auto-created raw ImageCard from file drop: ${file.name}`);
+                        };
+                        reader.readAsDataURL(file);
+                    });
+                    return;
+                }
+            }
+
+            // Check for dock skill type drag
+            const skillType = event.dataTransfer.getData('application/skilltype');
+            if (!skillType) return;
+
+            const skillDataRaw = event.dataTransfer.getData('application/skilldata');
 
             // Single undo step for "drop to create"
             pushHistory({ label: 'drop' });
@@ -800,10 +848,12 @@ function SkillGraphCanvasInner({
                 proOptions={{ hideAttribution: true }}
                 className="bg-app"
                 panOnDrag={interactionMode === 'hand' ? [0, 1] : [1]}
-                selectionOnDrag={interactionMode === 'select'}
+                selectionOnDrag={false}
                 panOnScroll={true}
                 nodesDraggable={interactionMode === 'select'}
                 elementsSelectable={interactionMode === 'select'}
+                nodeDragThreshold={1}
+                selectNodesOnDrag={false}
             >
                 <Background color="var(--border-subtle)" gap={24} size={1} />
 

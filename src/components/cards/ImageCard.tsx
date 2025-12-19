@@ -94,7 +94,10 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
     const favorite = !!data.favorite;
     const locked = !!data.locked;
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const { nodes, setNodes, removeNode, updateNodeData } = useGraphStore();
+    // Performance: Use individual selectors to avoid re-render on unrelated changes
+    const setNodes = useGraphStore(state => state.setNodes);
+    const removeNode = useGraphStore(state => state.removeNode);
+    const updateNodeData = useGraphStore(state => state.updateNodeData);
     const resetSnapshots = useSnapshotStore(state => state.resetSnapshots);
 
     // Raw mode state
@@ -262,8 +265,9 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                 break;
             }
             case 'duplicate': {
-                useGraphStore.getState().pushHistory({ label: 'duplicate' });
-                const nodeToCopy = nodes.find(n => n.id === id);
+                const store = useGraphStore.getState();
+                store.pushHistory({ label: 'duplicate' });
+                const nodeToCopy = store.nodes.find(n => n.id === id);
                 if (!nodeToCopy) return;
                 const newNode = {
                     ...JSON.parse(JSON.stringify(nodeToCopy)),
@@ -275,7 +279,7 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                     parentId: undefined,
                     selected: false,
                 };
-                setNodes([...nodes, newNode]);
+                setNodes([...store.nodes, newNode]);
                 break;
             }
             case 'delete':
@@ -292,7 +296,7 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
             default:
                 break;
         }
-    }, [handleReplaceInput, handleResetInput, imageUrl, data.skillName, id, locked, updateNodeData, nodes, setNodes, removeNode, cycleColor]);
+    }, [handleReplaceInput, handleResetInput, imageUrl, data.skillName, id, locked, updateNodeData, setNodes, removeNode, cycleColor]);
 
     // Studio mode handlers
     const handleRun = useCallback(async () => {
@@ -595,20 +599,20 @@ function ImageCardComponent({ id, data, selected }: ImageCardProps) {
                         style={{ minHeight: '24px', maxHeight: '96px' }}
                     />
 
-	                    {/* Control Row */}
-	                    <div className="flex items-center gap-2 relative z-20">
-	                        {/* Model Dropdown */}
-	                        <div className="relative min-w-0">
-	                            <button
-	                                onClick={() => setShowDropdown(showDropdown === 'model' ? null : 'model')}
-	                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors min-w-0 whitespace-nowrap ${showDropdown === 'model' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'}`}
-	                                title={model}
-	                            >
-	                                <span className="min-w-0 truncate">{model}</span>
-	                                <ChevronDown size={12} className={`shrink-0 transition-transform ${showDropdown === 'model' ? 'rotate-180' : ''}`} />
-	                            </button>
-	                            {showDropdown === 'model' && (
-	                                <div className="absolute bottom-full mb-2 left-0 w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden flex flex-col py-1">
+                    {/* Control Row */}
+                    <div className="flex items-center gap-2 relative z-20">
+                        {/* Model Dropdown */}
+                        <div className="relative min-w-0">
+                            <button
+                                onClick={() => setShowDropdown(showDropdown === 'model' ? null : 'model')}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors min-w-0 whitespace-nowrap ${showDropdown === 'model' ? 'bg-gray-200 text-gray-900' : 'bg-gray-200/50 hover:bg-gray-200 text-gray-700'}`}
+                                title={model}
+                            >
+                                <span className="min-w-0 truncate">{model}</span>
+                                <ChevronDown size={12} className={`shrink-0 transition-transform ${showDropdown === 'model' ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showDropdown === 'model' && (
+                                <div className="absolute bottom-full mb-2 left-0 w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden flex flex-col py-1">
                                     {MODELS.map(m => (
                                         <button
                                             key={m}

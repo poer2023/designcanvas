@@ -31,7 +31,12 @@ function UpscaleCardComponent({ id, data, selected }: UpscaleCardProps) {
     const scale = (data.scale as 2 | 4 | undefined) ?? 2;
     const isRunning = data.status === 'running';
 
-    const { nodes, setNodes, removeNode, toggleNodeLock, updateNodeData, updateNodeStatus } = useGraphStore();
+    // Performance: Use individual selectors to avoid re-render on unrelated changes
+    const setNodes = useGraphStore(state => state.setNodes);
+    const removeNode = useGraphStore(state => state.removeNode);
+    const toggleNodeLock = useGraphStore(state => state.toggleNodeLock);
+    const updateNodeData = useGraphStore(state => state.updateNodeData);
+    const updateNodeStatus = useGraphStore(state => state.updateNodeStatus);
     const resetSnapshots = useSnapshotStore(s => s.resetSnapshots);
 
     const staleState = useSnapshotStore(s => s.getStaleState(id));
@@ -123,8 +128,9 @@ function UpscaleCardComponent({ id, data, selected }: UpscaleCardProps) {
                 })();
                 break;
             case 'duplicate': {
-                useGraphStore.getState().pushHistory({ label: 'duplicate' });
-                const nodeToCopy = nodes.find(n => n.id === id);
+                const store = useGraphStore.getState();
+                store.pushHistory({ label: 'duplicate' });
+                const nodeToCopy = store.nodes.find(n => n.id === id);
                 if (!nodeToCopy) return;
                 const newNode = {
                     ...JSON.parse(JSON.stringify(nodeToCopy)),
@@ -136,7 +142,7 @@ function UpscaleCardComponent({ id, data, selected }: UpscaleCardProps) {
                     parentId: undefined,
                     selected: false,
                 };
-                setNodes([...nodes, newNode]);
+                setNodes([...store.nodes, newNode]);
                 break;
             }
             case 'delete':
@@ -158,7 +164,7 @@ function UpscaleCardComponent({ id, data, selected }: UpscaleCardProps) {
             default:
                 break;
         }
-    }, [id, nodes, setNodes, removeNode, toggleNodeLock, data.skillName, updateNodeData, cycleColor, handleReset, hasResults]);
+    }, [id, setNodes, removeNode, toggleNodeLock, data.skillName, updateNodeData, cycleColor, handleReset, hasResults]);
 
     return (
         <div className="group/card relative">

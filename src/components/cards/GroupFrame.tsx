@@ -100,7 +100,11 @@ const GROUP_CONFIG: Record<GroupType, {
 };
 
 function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
-    const { nodes, setNodes, removeNode, toggleNodeLock, updateNodeData } = useGraphStore();
+    // Performance: Use individual selectors to avoid re-render on unrelated changes
+    const setNodes = useGraphStore(state => state.setNodes);
+    const removeNode = useGraphStore(state => state.removeNode);
+    const toggleNodeLock = useGraphStore(state => state.toggleNodeLock);
+    const updateNodeData = useGraphStore(state => state.updateNodeData);
     const [groupType] = useState<GroupType>(data.groupType || 'blank');
     const [autoRun, setAutoRun] = useState(data.autoRun || false);
     const [magnetic, setMagnetic] = useState(data.magnetic ?? true);
@@ -110,10 +114,10 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
     const config = GROUP_CONFIG[groupType];
     const Icon = config.icon;
 
-    const handleRun = useCallback(async () => {
+    const handleRun = useCallback(async (dirtyOnly = false) => {
         setIsRunning(true);
         try {
-            await runGraph({ mode: 'RUN_GROUP', startNodeId: id });
+            await runGraph({ mode: 'RUN_GROUP', startNodeId: id }, { dirtyOnly });
         } finally {
             // Runner updates node statuses; we keep this spinner local to the group header.
             await new Promise(resolve => setTimeout(resolve, 150));
@@ -148,8 +152,9 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
                 })();
                 break;
             case 'duplicate': {
-                useGraphStore.getState().pushHistory({ label: 'duplicate' });
-                const nodeToCopy = nodes.find(n => n.id === id);
+                const store = useGraphStore.getState();
+                store.pushHistory({ label: 'duplicate' });
+                const nodeToCopy = store.nodes.find(n => n.id === id);
                 if (!nodeToCopy) return;
                 const newNode = {
                     ...JSON.parse(JSON.stringify(nodeToCopy)),
@@ -161,7 +166,7 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
                     parentId: undefined,
                     selected: false,
                 };
-                setNodes([...nodes, newNode]);
+                setNodes([...store.nodes, newNode]);
                 break;
             }
             case 'delete':
@@ -185,7 +190,7 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
             default:
                 break;
         }
-    }, [handleRun, id, nodes, setNodes, removeNode, toggleNodeLock, data.label, data.skillName, config.label, updateNodeData, cycleColor]);
+    }, [handleRun, id, setNodes, removeNode, toggleNodeLock, data.label, data.skillName, config.label, updateNodeData, cycleColor]);
 
     return (
         <div className="group/card relative w-full h-full">
@@ -262,7 +267,7 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
                     <div className="flex items-center gap-1 pl-2 border-l border-gray-200/50 opacity-0 group-hover:opacity-100 transition-opacity">
                         {groupType !== 'blank' && (
                             <button
-                                onClick={handleRun}
+                                onClick={() => handleRun(false)}
                                 disabled={isRunning}
                                 className="p-1 hover:bg-white/50 rounded-full transition-colors"
                                 style={{ color: config.color }}
@@ -324,6 +329,21 @@ function GroupFrameComponent({ id, data, selected }: GroupFrameProps) {
                                     className="w-3 h-3 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
                                 />
                             </label>
+
+                            {/* PRD v2.0: Run Dirty Only */}
+                            <button
+                                onClick={() => { handleRun(true); setShowSettings(false); }}
+                                disabled={isRunning}
+                                className="flex items-center gap-2 w-full p-1.5 rounded-lg hover:bg-yellow-50 transition-colors text-left"
+                            >
+                                <div className="p-1 rounded-md bg-yellow-100 text-yellow-600">
+                                    <AlertCircle size={12} />
+                                </div>
+                                <div className="flex-1">
+                                    <div className="text-[10px] font-medium text-gray-700">Run Dirty Only</div>
+                                    <div className="text-[9px] text-gray-400">Skip fresh nodes</div>
+                                </div>
+                            </button>
                         </div>
 
                         <div className="h-px bg-gray-100 my-2" />

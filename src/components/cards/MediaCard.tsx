@@ -37,7 +37,11 @@ function MediaCardComponent({ id, data, selected }: MediaCardProps) {
     const imageUrl = (data.imageUrl as string | undefined) || '';
     const locked = !!data.locked;
 
-    const { nodes, setNodes, removeNode, toggleNodeLock, updateNodeData } = useGraphStore();
+    // Performance: Use individual selectors to avoid re-render on unrelated changes
+    const setNodes = useGraphStore(state => state.setNodes);
+    const removeNode = useGraphStore(state => state.removeNode);
+    const toggleNodeLock = useGraphStore(state => state.toggleNodeLock);
+    const updateNodeData = useGraphStore(state => state.updateNodeData);
     const createSnapshot = useSnapshotStore(s => s.createSnapshot);
     const resetSnapshots = useSnapshotStore(s => s.resetSnapshots);
     const snapshotHistory = useSnapshotStore(s => s.snapshotHistory);
@@ -147,8 +151,9 @@ function MediaCardComponent({ id, data, selected }: MediaCardProps) {
                 })();
                 break;
             case 'duplicate': {
-                useGraphStore.getState().pushHistory({ label: 'duplicate' });
-                const nodeToCopy = nodes.find(n => n.id === id);
+                const store = useGraphStore.getState();
+                store.pushHistory({ label: 'duplicate' });
+                const nodeToCopy = store.nodes.find(n => n.id === id);
                 if (!nodeToCopy) return;
                 const newNode = {
                     ...JSON.parse(JSON.stringify(nodeToCopy)),
@@ -160,7 +165,7 @@ function MediaCardComponent({ id, data, selected }: MediaCardProps) {
                     parentId: undefined,
                     selected: false,
                 };
-                setNodes([...nodes, newNode]);
+                setNodes([...store.nodes, newNode]);
                 break;
             }
             case 'delete':

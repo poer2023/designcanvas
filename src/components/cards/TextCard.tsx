@@ -222,7 +222,11 @@ function TextCardComponent({ id, data, selected }: TextCardProps) {
     const [showPreview, setShowPreview] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-    const { nodes, setNodes, removeNode, toggleNodeLock, updateNodeData } = useGraphStore();
+    // Performance: Use individual selectors to avoid re-render on nodes array changes
+    const setNodes = useGraphStore(state => state.setNodes);
+    const removeNode = useGraphStore(state => state.removeNode);
+    const toggleNodeLock = useGraphStore(state => state.toggleNodeLock);
+    const updateNodeData = useGraphStore(state => state.updateNodeData);
     const createSnapshot = useSnapshotStore(state => state.createSnapshot);
 
     const cycleColor = (current: string | undefined) => {
@@ -349,8 +353,9 @@ function TextCardComponent({ id, data, selected }: TextCardProps) {
                 setShowPreview(true);
                 break;
             case 'duplicate': {
-                useGraphStore.getState().pushHistory({ label: 'duplicate' });
-                const nodeToCopy = nodes.find(n => n.id === id);
+                const store = useGraphStore.getState();
+                store.pushHistory({ label: 'duplicate' });
+                const nodeToCopy = store.nodes.find(n => n.id === id);
                 if (!nodeToCopy) return;
                 const newNode = {
                     ...JSON.parse(JSON.stringify(nodeToCopy)),
@@ -361,7 +366,7 @@ function TextCardComponent({ id, data, selected }: TextCardProps) {
                     },
                     selected: false,
                 };
-                setNodes([...nodes, newNode]);
+                setNodes([...store.nodes, newNode]);
                 break;
             }
             case 'delete':

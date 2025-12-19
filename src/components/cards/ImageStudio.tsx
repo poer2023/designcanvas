@@ -259,7 +259,11 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
 
     // PRD v2.1: Action Bar handlers
     const { resetSnapshots, setActiveSnapshot } = useSnapshotStore();
-    const { removeNode, setNodes, nodes, toggleNodeLock, updateNodeData } = useGraphStore();
+    // Performance: Use individual selectors to avoid re-render on unrelated node changes
+    const removeNode = useGraphStore(state => state.removeNode);
+    const setNodes = useGraphStore(state => state.setNodes);
+    const toggleNodeLock = useGraphStore(state => state.toggleNodeLock);
+    const updateNodeData = useGraphStore(state => state.updateNodeData);
 
     const cycleColor = useCallback(() => {
         const colors = [undefined, '#FEF3C7', '#DBEAFE', '#DCFCE7', '#FCE7F3', '#E0E7FF'] as const;
@@ -344,10 +348,11 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                     window.dispatchEvent(new Event('posterlab:assets-updated'));
                 })();
                 break;
-            case 'duplicate':
+            case 'duplicate': {
                 // Duplicate node by copying and offsetting
-                useGraphStore.getState().pushHistory({ label: 'duplicate' });
-                const nodeToCopy = nodes.find(n => n.id === id);
+                const store = useGraphStore.getState();
+                store.pushHistory({ label: 'duplicate' });
+                const nodeToCopy = store.nodes.find(n => n.id === id);
                 if (nodeToCopy) {
                     const newNode = {
                         ...JSON.parse(JSON.stringify(nodeToCopy)),
@@ -358,9 +363,10 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
                         },
                         selected: false,
                     };
-                    setNodes([...nodes, newNode]);
+                    setNodes([...store.nodes, newNode]);
                 }
                 break;
+            }
             case 'delete':
                 removeNode(id);
                 break;
@@ -383,7 +389,7 @@ function ImageStudioComponent({ id, data, selected }: ImageStudioProps) {
             default:
                 console.log('Action:', actionId);
         }
-    }, [id, handleRun, imageHistory, activeImageSnapshotId, setActiveSnapshot, resetSnapshots, removeNode, nodes, setNodes, toggleNodeLock, data.skillName, updateNodeData, cycleColor, prompt, effectiveModelId, ratio, resolution, count, results]);
+    }, [id, handleRun, imageHistory, activeImageSnapshotId, setActiveSnapshot, resetSnapshots, removeNode, setNodes, toggleNodeLock, data.skillName, updateNodeData, cycleColor, prompt, effectiveModelId, ratio, resolution, count, results]);
 
     const handleLightboxPrev = useCallback(() => {
         setLightboxIndex((i) => {

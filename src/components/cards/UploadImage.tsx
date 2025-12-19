@@ -42,7 +42,11 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const { nodes, setNodes, removeNode, toggleNodeLock, updateNodeData } = useGraphStore();
+    // Performance: Use individual selectors to avoid re-render on unrelated changes
+    const setNodes = useGraphStore(state => state.setNodes);
+    const removeNode = useGraphStore(state => state.removeNode);
+    const toggleNodeLock = useGraphStore(state => state.toggleNodeLock);
+    const updateNodeData = useGraphStore(state => state.updateNodeData);
     const createSnapshot = useSnapshotStore(state => state.createSnapshot);
     const resetSnapshots = useSnapshotStore(state => state.resetSnapshots);
 
@@ -162,8 +166,9 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
                 })();
                 break;
             case 'duplicate': {
-                useGraphStore.getState().pushHistory({ label: 'duplicate' });
-                const nodeToCopy = nodes.find(n => n.id === id);
+                const store = useGraphStore.getState();
+                store.pushHistory({ label: 'duplicate' });
+                const nodeToCopy = store.nodes.find(n => n.id === id);
                 if (!nodeToCopy) return;
                 const newNode = {
                     ...JSON.parse(JSON.stringify(nodeToCopy)),
@@ -175,7 +180,7 @@ function UploadImageComponent({ id, data, selected }: UploadImageProps) {
                     parentId: undefined,
                     selected: false,
                 };
-                setNodes([...nodes, newNode]);
+                setNodes([...store.nodes, newNode]);
                 break;
             }
             case 'delete':

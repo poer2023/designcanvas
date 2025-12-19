@@ -629,6 +629,8 @@ export interface RunOptions {
     onNodeStart?: (nodeId: string) => void;
     onNodeComplete?: (nodeId: string, result: ExecutionResult) => void;
     onComplete?: () => void;
+    /** PRD v2.0: Only run stale/blocked nodes, skip fresh nodes */
+    dirtyOnly?: boolean;
 }
 
 const ALL_PORT_KEYS: PortKey[] = [
@@ -817,6 +819,26 @@ export async function runGraph(params: RunGraphParams, options: RunOptions = {})
             resultsByNodeId[nodeId] = skipped;
             options.onNodeComplete?.(nodeId, skipped);
             continue;
+        }
+
+        // PRD v2.0: dirtyOnly - skip fresh nodes
+        if (options.dirtyOnly) {
+            const staleState = snapshotStore.getStaleState(nodeId);
+            if (staleState === 'fresh') {
+                console.log(`[dirtyOnly] Skipping fresh node: ${nodeId} (${node.type})`);
+                const { inputRefs } = collectInputs(nodeId);
+                const activeOutputs: SnapshotRef[] = [];
+                for (const portKey of ALL_PORT_KEYS) {
+                    const snap = snapshotStore.getActiveSnapshot(nodeId, portKey);
+                    if (snap) activeOutputs.push(snapshotToRef(snap));
+                }
+                recipeStore.updateNodeIoMap(recipeId, nodeId, { inputs: inputRefs, outputs: activeOutputs });
+
+                const skipped: ExecutionResult = { success: true, outputs: {}, duration: 0 };
+                resultsByNodeId[nodeId] = skipped;
+                options.onNodeComplete?.(nodeId, skipped);
+                continue;
+            }
         }
 
         options.onNodeStart?.(nodeId);
