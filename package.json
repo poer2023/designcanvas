@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "desktop:dev": "concurrently -k -n next,electron -c blue,magenta \"pnpm dev\" \"wait-on http://127.0.0.1:3000 && electron desktop/main.cjs\"",
+    "desktop:preview": "pnpm build && concurrently -k -n next,electron -c blue,magenta \"pnpm start\" \"wait-on http://127.0.0.1:3000 && electron desktop/main.cjs\"",
+    "desktop:dist": "pnpm build && electron-builder --config electron-builder.yml"
   },
   "dependencies": {
     "@xyflow/react": "^12.10.0",
@@ -31,9 +34,13 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
+    "concurrently": "^10.0.3",
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.0.10",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.0.10"
   }
 }

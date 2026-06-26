@@ -1,0 +1,21 @@
+appId: ai.designcanvas.desktop
+productName: DesignCanvas
+directories:
+  output: release
+files:
+  - desktop/**
+  - .next/**
+  - public/**
+  - package.json
+  - next.config.ts
+  - src/lib/db/schema.sql
+asarUnpack:
+  - node_modules/better-sqlite3/**
+win:
+  target:
+    - nsis
+  artifactName: DesignCanvas-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true

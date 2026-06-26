@@ -18,6 +18,14 @@ pnpm install --frozen-lockfile
 
 If native SQLite dependency installation fails on Windows, install the usual native build prerequisites for Node modules, then retry.
 
+If Electron binary download is unstable, install or rebuild with a mirror:
+
+```powershell
+$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+pnpm install --frozen-lockfile
+pnpm rebuild electron
+```
+
 ## Current Validation Commands
 
 ```bash
@@ -25,6 +33,24 @@ pnpm run lint
 pnpm run build
 pnpm run dev
 ```
+
+## Electron Development Shell
+
+The first Electron shell is now present. It loads the existing Next renderer from `http://127.0.0.1:3000` and exposes a narrow preload bridge as `window.posterLabDesktop`.
+
+```bash
+pnpm run desktop:dev
+```
+
+This is a Phase 1 desktop shell, not the final offline Windows package architecture. The next step is to move local APIs from Next API routes into Electron main-process services and then make the renderer static/offline-friendly.
+
+Preview against a production Next build:
+
+```bash
+pnpm run desktop:preview
+```
+
+Packaging config has been added in `electron-builder.yml`, but `desktop:dist` should be treated as a packaging baseline, not a finished installer, until the local API migration is complete.
 
 ## Current Product Surface
 
@@ -59,4 +85,3 @@ pnpm run dev
 ## Product Reminder
 
 This project should become a local design workspace, not a pure image generation app. Image generation should be one capability among local assets, task execution, recipes, and reusable project context.
-

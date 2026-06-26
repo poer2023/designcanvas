@@ -37,8 +37,17 @@ export interface DesktopRunResult {
   error?: string;
 }
 
+export interface DesktopAppInfo {
+  name: string;
+  version: string;
+  isPackaged: boolean;
+  rendererUrl: string;
+  platform: string;
+}
+
 export interface DesktopBridge {
   platform: 'browser' | 'electron';
+  getAppInfo?(): Promise<DesktopAppInfo>;
   listProjects(): Promise<DesktopProjectSummary[]>;
   loadGraph(projectId: string): Promise<DesktopGraphSnapshot | null>;
   saveGraph(projectId: string, graph: DesktopGraphSnapshot): Promise<void>;
@@ -51,4 +60,3 @@ declare global {
     posterLabDesktop?: DesktopBridge;
   }
 }
-

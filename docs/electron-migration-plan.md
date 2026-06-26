@@ -49,6 +49,16 @@ src/
 
 Phase 1 can still run the existing Next renderer. The goal is to establish desktop packaging and local capability ownership.
 
+Current scaffold:
+
+- `desktop/main.cjs`
+- `desktop/preload.cjs`
+- `src/lib/desktop/types.ts`
+- `src/lib/desktop/bridge.ts`
+- `electron-builder.yml`
+- `pnpm run desktop:dev`
+- `pnpm run desktop:preview`
+
 ## Phase 2: Local API Migration
 
 Move local APIs out of Next API routes and into Electron main services:
@@ -92,4 +102,3 @@ Minimum targets:
 - do not turn image generation into the only product workflow
 - do not couple tldraw shape data directly to provider-specific generation payloads
 - do not let the renderer own SQLite or filesystem access
-
