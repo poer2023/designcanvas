@@ -620,7 +620,7 @@ function SkillGraphCanvasInner({
         );
     }, [isDrawing, drawStart, drawCurrent]);
 
-    const onNodeDragStop = useCallback((_: React.MouseEvent, dragged: SkillNode) => {
+    const onNodeDragStop = useCallback((_: unknown, dragged: SkillNode) => {
         const currentNodes = nodes;
         if (currentNodes.length === 0) return;
 
@@ -737,7 +737,7 @@ function SkillGraphCanvasInner({
         setNodes(reorderNodesForParenting(nextNodes));
     }, [nodes, getAbsolutePosition, getNodeDimensions, reorderNodesForParenting, setNodes]);
 
-    const onNodeDragStart = useCallback((_: React.MouseEvent, dragged: SkillNode) => {
+    const onNodeDragStart = useCallback((_: unknown, dragged: SkillNode) => {
         pushHistory({ label: 'move' });
     }, [pushHistory]);
 
@@ -800,7 +800,7 @@ function SkillGraphCanvasInner({
     }, [edges, hoveredEdgeId, interactionMode]);
 
     // Handle edge click for scissors mode
-    const onEdgeClick = useCallback((_: React.MouseEvent, edge: SkillEdge) => {
+    const onEdgeClick = useCallback((_: unknown, edge: SkillEdge) => {
         if (interactionMode !== 'scissors') return;
         // Remove the clicked edge
         pushHistory({ label: 'removeEdge' });
@@ -808,7 +808,7 @@ function SkillGraphCanvasInner({
         setEdges(edges.filter(e => e.id !== edge.id));
     }, [interactionMode, edges, setEdges, pushHistory]);
 
-    const handleEdgeMouseEnter = useCallback((_: React.MouseEvent, edge: SkillEdge) => {
+    const handleEdgeMouseEnter = useCallback((_: unknown, edge: SkillEdge) => {
         if (interactionMode !== 'scissors') return;
         setHoveredEdgeId(edge.id);
     }, [interactionMode]);

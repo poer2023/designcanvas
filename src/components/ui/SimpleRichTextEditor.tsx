@@ -263,7 +263,7 @@ export function SimpleRichTextEditor({
                     [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:my-1
                     [&_code]:px-1 [&_code]:py-0.5 [&_code]:bg-gray-100 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono
                     [&_a]:text-blue-600 [&_a]:underline
-                    ${!value && !editorRef.current?.innerHTML ? 'before:content-[attr(data-placeholder)] before:text-gray-400' : ''}
+                    ${!value ? 'before:content-[attr(data-placeholder)] before:text-gray-400' : ''}
                 `}
                 data-placeholder={placeholder}
                 suppressContentEditableWarning
