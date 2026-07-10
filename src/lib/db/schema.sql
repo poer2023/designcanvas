@@ -154,3 +154,16 @@ CREATE TABLE IF NOT EXISTS project_graphs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_project_graphs_updated ON project_graphs(updated_at DESC);
+
+-- Primary freeform canvas document. Keep this separate from project_graphs:
+-- project_graphs is the executable DAG, while this table owns tldraw records.
+CREATE TABLE IF NOT EXISTS canvas_documents (
+  project_id TEXT PRIMARY KEY,
+  schema_version TEXT NOT NULL DEFAULT 'tldraw-4.5',
+  snapshot_json TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_canvas_documents_updated ON canvas_documents(updated_at DESC);

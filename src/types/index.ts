@@ -3,10 +3,10 @@
 export interface Project {
     id: string;
     name: string;
-    description?: string;
-    style_profile_id?: string;
-    brief_id?: string;
-    cover_image?: string;
+    description?: string | null;
+    style_profile_id?: string | null;
+    brief_id?: string | null;
+    cover_image?: string | null;
     created_at: string;
     updated_at: string;
 }

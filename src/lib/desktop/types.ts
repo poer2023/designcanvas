@@ -1,20 +1,68 @@
-export interface DesktopProjectSummary {
+export interface DesktopProject {
   id: string;
   name: string;
   description?: string | null;
-  coverImage?: string | null;
-  updatedAt?: string;
+  style_profile_id?: string | null;
+  brief_id?: string | null;
+  cover_image?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface DesktopGraphSnapshot {
-  nodes: unknown[];
-  edges: unknown[];
-  viewport?: {
-    x: number;
-    y: number;
-    zoom: number;
+export interface DesktopCreateProjectInput {
+  name: string;
+  description?: string;
+  style_profile_id?: string;
+}
+
+export interface DesktopViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export interface DesktopGraphDocument {
+  projectId: string;
+  schemaVersion: string;
+  graphSnapshot: {
+    nodes: unknown[];
+    edges: unknown[];
   };
+  viewport: DesktopViewport;
+  version: number;
+  updatedAt: string;
+}
+
+export interface DesktopSaveGraphRequest {
+  projectId: string;
+  graphSnapshot: DesktopGraphDocument['graphSnapshot'];
+  viewport: DesktopViewport;
+  baseVersion: number;
+  force?: boolean;
+}
+
+export interface DesktopSaveResult {
+  success: boolean;
   version?: number;
+  conflict?: boolean;
+  serverVersion?: number;
+  error?: string;
+}
+
+export interface DesktopCanvasDocument {
+  projectId: string;
+  schemaVersion: string;
+  snapshot: Record<string, unknown>;
+  version: number;
+  updatedAt: string;
+}
+
+export interface DesktopSaveCanvasRequest {
+  projectId: string;
+  schemaVersion: string;
+  snapshot: Record<string, unknown>;
+  baseVersion: number;
+  force?: boolean;
 }
 
 export interface DesktopAssetImportResult {
@@ -43,14 +91,20 @@ export interface DesktopAppInfo {
   isPackaged: boolean;
   rendererUrl: string;
   platform: string;
+  dataPath: string;
 }
 
 export interface DesktopBridge {
   platform: 'browser' | 'electron';
   getAppInfo?(): Promise<DesktopAppInfo>;
-  listProjects(): Promise<DesktopProjectSummary[]>;
-  loadGraph(projectId: string): Promise<DesktopGraphSnapshot | null>;
-  saveGraph(projectId: string, graph: DesktopGraphSnapshot): Promise<void>;
+  listProjects(): Promise<DesktopProject[]>;
+  getProject(projectId: string): Promise<DesktopProject | null>;
+  createProject(input: DesktopCreateProjectInput): Promise<DesktopProject>;
+  deleteProject(projectId: string): Promise<boolean>;
+  loadGraph(projectId: string): Promise<DesktopGraphDocument | null>;
+  saveGraph(request: DesktopSaveGraphRequest): Promise<DesktopSaveResult>;
+  loadCanvasDocument(projectId: string): Promise<DesktopCanvasDocument | null>;
+  saveCanvasDocument(request: DesktopSaveCanvasRequest): Promise<DesktopSaveResult>;
   importAssets(projectId: string): Promise<DesktopAssetImportResult[]>;
   runGraph(request: DesktopRunRequest): Promise<DesktopRunResult>;
 }

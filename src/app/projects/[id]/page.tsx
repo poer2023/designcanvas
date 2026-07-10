@@ -27,6 +27,7 @@ import {
     type TemplateNode,
     type TemplateEdge,
 } from '@/lib/templateUtils';
+import { getDesktopBridge } from '@/lib/desktop/bridge';
 
 const SkillGraphCanvas = dynamic(() => import('@/components/graph/SkillGraphCanvas'), { ssr: false });
 
@@ -60,7 +61,7 @@ export default function SpacePage() {
     useLoadGraph(params.id as string | undefined);
 
     // PRD v2.0: Auto-save with debounce
-    const { saveStatus, saveNow, forceSave, hasConflict } = useAutoSave({
+    const { saveStatus, forceSave } = useAutoSave({
         enabled: !!params.id,
         onConflict: () => setShowConflictDialog(true),
     });
@@ -162,13 +163,9 @@ export default function SpacePage() {
 
     async function fetchSpace(id: string) {
         try {
-            const response = await fetch(`/api/projects/${id}`);
-            const data = await response.json();
-            if (data.success) {
-                setSpace(data.data);
-            } else {
-                router.push('/');
-            }
+            const project = await getDesktopBridge().getProject(id);
+            if (!project) return router.push('/');
+            setSpace(project);
         } catch (error) {
             console.error('Failed to fetch space:', error);
         } finally {

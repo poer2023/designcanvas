@@ -2,119 +2,116 @@
 
 ## Decision
 
-Use Electron for the Windows-first desktop client.
+Use Electron for the Windows-first desktop client. Chromium and Node ship with the app, the existing TypeScript code remains reusable, and future local agent work can use filesystem, workers, child processes, browser automation, and native modules without a Rust bridge.
 
-Tauri v2 remains a possible future option, but it is not the recommended first client shell for this product. The first release should optimize for compatibility, local capability, and engineering speed rather than minimum bundle size.
-
-## Target Runtime Split
+## Runtime
 
 ```text
 Electron main process
-  - app lifecycle
-  - secure config and key storage
-  - SQLite access
-  - filesystem access
-  - local agent process lifecycle
-  - worker queues
-  - native dialogs and notifications
-
+  app lifecycle and single-instance lock
+  SQLite in app.getPath('userData')
+  filesystem and native dialogs
+  packaged Next standalone child process
+  future job workers and secure settings
+             |
+             | allowlisted ipcMain handlers
+             v
 Electron preload
-  - typed IPC bridge
-  - narrow capability surface
-  - no broad Node exposure to renderer
-
+  contextBridge: DesktopBridge only
+             |
+             v
 React renderer
-  - app shell
-  - tldraw canvas
-  - project UI
-  - cards, inspector, dock, asset drawer
-  - reads/writes local capabilities through DesktopBridge
-
-Worker / sidecar processes
-  - long-running generation jobs
-  - local model/provider calls
-  - browser automation
-  - file import/export
-  - future agent execution
+  project library
+  tldraw freeform canvas
+  legacy workflow view
+  agent/task panel
 ```
 
-## Keep From Current Prototype
+`contextIsolation` is enabled and `nodeIntegration` is disabled. The renderer never imports `better-sqlite3`, `fs`, `path`, `child_process`, or Electron APIs.
 
-- SQLite schema in `src/lib/db/schema.sql`
-- project graph persistence
-- snapshot and active output semantics
-- recipe runner and replay model
-- provider adapter abstraction
-- existing cards as product concepts
-- PRD version history
+## Renderer Boot
 
-## Replace Or Reframe
+Development uses `http://127.0.0.1:3000` from `next dev`.
 
-### React Flow
+Packaged builds use `next.config.ts` with `output: "standalone"`. Electron reserves a loopback port, launches `resources/renderer/server.js` using Electron's Node runtime, waits for the server, and then creates the browser window. This keeps existing Next routes available while local-only routes migrate to IPC.
 
-`@xyflow/react` should not remain the primary canvas engine if the goal is Lovart-like freeform interaction. It is good for workflow graphs but less ideal for freeform design manipulation.
-
-Recommended use:
-
-- short term: keep it while Electron shell and data model are stabilized
-- medium term: introduce `tldraw` as the primary canvas
-- long term: keep React Flow only for an optional workflow/DAG view, or remove it after the tldraw model can express execution dependencies
-
-### Next API Routes
-
-The current project uses Next API routes as a local server boundary. In the desktop client, do not let this become the permanent architecture.
-
-Recommended transition:
-
-- phase 1: Electron launches the existing Next dev/prod server as a compatibility bridge
-- phase 2: move local-only APIs into Electron main IPC handlers
-- phase 3: keep any cloud APIs explicit and separate from local desktop APIs
-
-## DesktopBridge Boundary
-
-All renderer calls to local capabilities should go through a typed bridge:
-
-- project CRUD
-- graph load/save
-- asset import/export
-- provider settings
-- secure secrets
-- run execution
-- local files
-- app update/status
-
-The renderer should not import Node modules directly. This keeps a future shell swap possible and keeps Windows packaging safer.
-
-## tldraw Shape Model
-
-Start with these custom shapes:
-
-- `text-card`
-- `image-card`
-- `media-card`
-- `generated-result-card`
-- `agent-task-card`
-- `group-frame`
-- `workflow-link`
-
-Each shape should store only stable shape state. Heavy payloads should live in SQLite/assets and be referenced by IDs.
+The loopback server is a compatibility runtime, not the owner of local desktop state.
+Its temporary compatibility database is redirected to `<userData>/compat`. `desktop:prepare-renderer` removes repository database files from `.next/standalone` before packaging, so local project data and credentials cannot be copied into an installer by output tracing.
 
 ## Data Ownership
 
 ```text
-Canvas shape state -> local project graph
-Asset binary/data -> local asset store
-Run state -> recipes/jobs tables
-Provider settings -> app settings + secure secret store
-Transient UI state -> Zustand only
+canvas_documents
+  tldraw document records + session/camera snapshot
+
+project_graphs
+  executable nodes + dependency edges + workflow viewport
+
+assets directory
+  imported and generated binary files
+
+recipes / generation_jobs / audit_logs
+  execution history and provenance
+
+Zustand
+  transient UI state only
 ```
+
+Canvas shapes must reference heavy assets by ID. The execution graph may be compiled from explicit canvas bindings later, but freeform visual position is never an execution dependency.
+
+## Native Database
+
+`desktop/services/database.cjs` opens `designcanvas.db` under Electron's user-data directory, enables WAL, foreign keys, and a busy timeout, then records numbered migrations in `schema_migrations`.
+
+Development explicitly uses `<appData>/DesignCanvas`; packaged builds use Electron's product-scoped default. `DESIGNCANVAS_USER_DATA_DIR` may override the location for isolated smoke tests. Do not point it at the repository database.
+
+`better-sqlite3` must be rebuilt for Electron's ABI with:
+
+```bash
+pnpm run desktop:rebuild
+```
+
+After rebuilding, desktop renderer development and desktop tests run through `desktop/scripts/electron-node.cjs`. This keeps Electron main, the compatibility Next server, and SQLite on the same native ABI. Plain `pnpm dev` is the browser-preview path and expects the normal Node build produced by `pnpm install` or `pnpm rebuild better-sqlite3`.
+
+The repository-local `data/posterlab.db` remains the browser-preview database. It is neither the Electron-owned database nor an installer input.
+
+## DesktopBridge
+
+Implemented local capabilities:
+
+- app information and user-data path
+- project list/get/create/delete
+- execution graph load/save
+- tldraw document load/save
+- native multi-file import into the project asset directory
+- placeholder run entry point
+
+Next IPC migrations:
+
+- asset records and the `designcanvas-asset://` read protocol
+- recipes and job queue
+- provider/model settings
+- secrets using Electron `safeStorage`
+- worker cancellation and recovery
+- export and backup
 
 ## Security Baseline
 
-- `contextIsolation: true`
-- `nodeIntegration: false`
-- strict preload allowlist
-- no direct database access from renderer
-- no shell execution without explicit policy and audit record
-- local agent tasks recorded as jobs/artifacts
+- validate every IPC argument in main
+- reject path separators and traversal segments before constructing asset paths
+- no arbitrary IPC channel proxy
+- no arbitrary filesystem path reads from renderer input
+- open external HTTP links in the system browser
+- block cross-origin main-window navigation
+- keep provider secrets encrypted and main-process only
+- record privileged agent actions in audit logs
 
+## Production Gates
+
+- tldraw production license key
+- clean Windows 11 installer smoke test
+- code signing before public distribution
+- SmartScreen and auto-update strategy
+- native module rebuild verification
+- offline open/edit/save verification
+- measured canvas performance and crash recovery

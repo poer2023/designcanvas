@@ -1,87 +1,110 @@
 # Windows Development Handoff
 
-## Repository
+## Prerequisites
 
-```bash
+- Windows 11
+- Git
+- Node.js 22 LTS, at least 22.12
+- Corepack
+- Visual Studio Build Tools with Desktop development with C++ if a native prebuild is unavailable
+
+The repository pins pnpm 9.15.9 and declares the supported Node range.
+
+## Clone And Install
+
+```powershell
 git clone https://github.com/poer2023/designcanvas.git
 cd designcanvas
-```
-
-## Install
-
-Use pnpm.
-
-```bash
 corepack enable
 pnpm install --frozen-lockfile
+pnpm run desktop:rebuild
 ```
 
-If native SQLite dependency installation fails on Windows, install the usual native build prerequisites for Node modules, then retry.
-
-If Electron binary download is unstable, install or rebuild with a mirror:
+If Electron downloads are unstable:
 
 ```powershell
 $env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
 pnpm install --frozen-lockfile
 pnpm rebuild electron
+pnpm run desktop:rebuild
 ```
 
-## Current Validation Commands
+## Start
 
-```bash
-pnpm run lint
-pnpm run build
+Web renderer:
+
+```powershell
 pnpm run dev
 ```
 
-## Electron Development Shell
+Electron:
 
-The first Electron shell is now present. It loads the existing Next renderer from `http://127.0.0.1:3000` and exposes a narrow preload bridge as `window.posterLabDesktop`.
-
-```bash
+```powershell
 pnpm run desktop:dev
 ```
 
-This is a Phase 1 desktop shell, not the final offline Windows package architecture. The next step is to move local APIs from Next API routes into Electron main-process services and then make the renderer static/offline-friendly.
+`desktop:dev` runs both Electron main and the Next compatibility renderer with Electron's bundled Node runtime. This prevents native SQLite ABI mismatches.
 
-Preview against a production Next build:
+If you later return to browser-only `pnpm run dev` after an Electron rebuild, restore the normal Node native module first:
 
-```bash
-pnpm run desktop:preview
+```powershell
+pnpm rebuild better-sqlite3
 ```
 
-Packaging config has been added in `electron-builder.yml`, but `desktop:dist` should be treated as a packaging baseline, not a finished installer, until the local API migration is complete.
+Set `DESIGNCANVAS_OPEN_DEVTOOLS=1` before the desktop command only when DevTools are needed.
 
-## Current Product Surface
+## First Smoke Test
 
-- `/`: Spaces/project list and templates
-- `/projects/[id]`: full-screen canvas
-- `/settings`: provider/model settings
-- `/gallery`: generated poster assets
-- `/inspiration`: reference sets
-- `/styles`: style profiles
+1. Launch the project library.
+2. Create a project.
+3. Confirm it opens at `/projects/<id>/canvas`.
+4. Pan and zoom with mouse and precision touchpad.
+5. Add brief, note, asset, and task cards.
+6. Resize and move cards; use undo and redo.
+7. Draw, add text, and create a frame.
+8. Wait for the saved indicator, close the project, reopen it, and confirm content plus camera position survived.
+9. Open the legacy execution graph from the workflow icon.
+10. Disable networking and repeat open/edit/save for the existing project.
 
-## Important Code Areas
+Electron data is stored under `app.getPath('userData')`, normally `%APPDATA%\DesignCanvas` on Windows. It is not stored in the repository checkout. Set `DESIGNCANVAS_USER_DATA_DIR` only when an isolated smoke-test profile is required.
 
-- `src/app/projects/[id]/page.tsx`: current canvas screen shell
-- `src/components/graph/SkillGraphCanvas.tsx`: current React Flow canvas
-- `src/components/canvas/Dock.tsx`: bottom tool dock
-- `src/components/canvas/AssetsDrawer.tsx`: asset reuse drawer
-- `src/components/canvas/CommandPalette.tsx`: add-card command palette
-- `src/lib/engine/runner.ts`: graph execution runner
-- `src/store/snapshotStore.ts`: output snapshots and active output state
-- `src/store/recipeStore.ts`: recipes and replay
-- `src/lib/db/schema.sql`: SQLite schema
-- `src/lib/adapters`: image/model provider adapters
+## Build
 
-## First Windows Tasks
+Verify first:
 
-1. Restore green build.
-2. Add Electron main/preload build.
-3. Move SQLite calls behind Electron main IPC.
-4. Add `tldraw` POC route for primary freeform canvas.
-5. Port one existing image card into a tldraw custom shape.
+```powershell
+pnpm run typecheck
+pnpm run test:desktop
+pnpm run lint
+pnpm run build
+```
 
-## Product Reminder
+Build the Windows x64 installer on Windows:
 
-This project should become a local design workspace, not a pure image generation app. Image generation should be one capability among local assets, task execution, recipes, and reusable project context.
+```powershell
+pnpm run desktop:dist:win
+```
+
+The Next standalone renderer is copied into the Electron resources directory and started automatically on a free loopback port in packaged builds.
+The build runs `desktop:prepare-renderer`, which rejects any repository `.db`, `.db-wal`, or `.db-shm` file left in the standalone payload. Compatibility routes write to `%APPDATA%\DesignCanvas\compat`; project, graph, and tldraw state use the Electron-owned database.
+
+## tldraw Production License
+
+Development works without a key. A distributed production build requires the appropriate tldraw license. After obtaining it, set the public build-time key:
+
+```powershell
+$env:NEXT_PUBLIC_TLDRAW_LICENSE_KEY="tldraw-..."
+pnpm run desktop:dist:win
+```
+
+Do not publish an installer merely because the loopback runtime technically launches without a key. Production use is a contractual gate.
+
+## Known Remaining Work
+
+- Windows package and clean-machine evidence are not yet recorded.
+- The application still uses Electron's default icon; add reviewed Windows `.ico` assets before installer release.
+- Asset import copies files locally, but the safe asset URL protocol and real image shape are next.
+- Recipes, provider settings, jobs, and posters still use compatibility Next routes.
+- The runner has not moved to an Electron worker.
+- Secrets still need Electron `safeStorage` ownership.
+- Signing, SmartScreen reputation, auto-update, backup, and crash-recovery tests remain.

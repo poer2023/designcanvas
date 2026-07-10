@@ -1018,7 +1018,7 @@ function StorageTab({ cacheStats, onRefresh }: { cacheStats: CacheStats | null; 
             </div>
 
             <div className="text-xs text-[var(--text-tertiary)]">
-                Data stored in <code className="bg-[var(--bg-hover)] px-1 rounded">./data/posterlab.db</code>
+                Data is stored in the local application data directory.
             </div>
         </div>
     );

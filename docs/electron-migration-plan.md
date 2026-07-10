@@ -2,103 +2,100 @@
 
 ## Goal
 
-Move DesignCanvas from a web prototype into a Windows-first Electron desktop client without losing the current project graph, SQLite, recipe, snapshot, and adapter work.
+Turn the existing Next.js prototype into a Windows-first local design client while preserving its project, graph, recipe, snapshot, and provider work.
 
-## Phase 0: Stabilize Current Baseline
+## Phase 0: Green Baseline - Complete
 
-Exit criteria:
+- pnpm workspace installs cleanly
+- TypeScript and production build pass
+- README describes the real product
+- Next.js and React are on a patched baseline
 
-- `pnpm install --frozen-lockfile` works
-- `pnpm run build` passes
-- blocking lint errors are fixed or intentionally scoped
-- README describes the real product instead of the default Next.js template
+## Phase 1: Desktop Runtime - Implemented, Windows Proof Pending
 
-Known issues from the handoff audit:
+Implemented:
 
-- `pnpm-workspace.yaml` was missing `packages`
-- `npm run build` failed on the React Flow drag handler type in `SkillGraphCanvas.tsx`
-- `npm run lint` reported React hook/ref errors and many cleanup warnings
+- Electron main and preload
+- typed IPC surface
+- Electron-owned SQLite in the user-data directory
+- schema migration ledger
+- single-instance behavior
+- native file import copy
+- Next standalone packaged-renderer bootstrap
+- compatibility data redirected to user data and repository databases stripped before packaging
+- electron-builder NSIS configuration
 
-## Phase 1: Electron Shell
+Remaining proof:
 
-Add Electron around the existing renderer with minimum product disruption.
+- rebuild native modules on Windows
+- package an unpacked Windows build
+- install and launch the NSIS artifact on a clean Windows 11 machine
 
-Recommended file layout:
+Current evidence: on 2026-07-10, the unsigned macOS ARM64 unpacked app booted its packaged standalone renderer, served the home page and a compatibility API with HTTP 200, loaded native SQLite, and created separate main and compatibility databases in an isolated user-data profile. This validates package structure, not Windows compatibility.
 
-```text
-desktop/
-  main/
-    app.ts
-    ipc.ts
-    windows.ts
-    services/
-      database.ts
-      assets.ts
-      jobs.ts
-      providers.ts
-  preload/
-    index.ts
-  workers/
-    runner.ts
+## Phase 2: Local API Migration - In Progress
 
-src/
-  lib/desktop/
-    bridge.ts
-    types.ts
-```
-
-Phase 1 can still run the existing Next renderer. The goal is to establish desktop packaging and local capability ownership.
-
-Current scaffold:
-
-- `desktop/main.cjs`
-- `desktop/preload.cjs`
-- `src/lib/desktop/types.ts`
-- `src/lib/desktop/bridge.ts`
-- `electron-builder.yml`
-- `pnpm run desktop:dev`
-- `pnpm run desktop:preview`
-
-## Phase 2: Local API Migration
-
-Move local APIs out of Next API routes and into Electron main services:
+Moved to IPC:
 
 - projects
-- project graphs
+- execution graphs
+- tldraw canvas documents
+
+Still on Next routes:
+
+- posters and assets metadata
 - recipes
-- jobs
-- posters/assets
-- provider settings
-- encrypted API keys
+- generation jobs
+- provider/model settings
+- encrypted provider secrets
+- styles, briefs, and reference sets
 
-The renderer should use `DesktopBridge` instead of `fetch('/api/...')` for local operations.
+Exit criteria: opening, editing, and exporting an existing project works with the network disabled and without relying on Next API routes for local data.
 
-## Phase 3: tldraw Primary Canvas
+## Phase 3: Primary tldraw Canvas - First Vertical Slice Complete
 
-Introduce `tldraw` as the primary canvas and keep the current React Flow graph as a compatibility view.
+Implemented:
 
-Steps:
+- tldraw 4.5.8 route at `/projects/[id]/canvas`
+- custom brief, note, asset, and task shapes
+- custom Lovart-like desktop shell and bottom toolbar
+- pan, zoom, select, draw, text, frame, undo, and redo controls
+- document plus session/camera persistence
+- optimistic version conflict detection
+- legacy React Flow execution view retained at `/projects/[id]`
 
-1. Create a small tldraw route/page with custom cards.
-2. Map existing node records to tldraw shapes.
-3. Store shape state in `project_graphs`.
-4. Keep execution dependencies in a graph model independent from visual coordinates.
-5. Port node action bars, assets drawer, result wall, and recipe replay to tldraw.
+Next:
 
-## Phase 4: Windows Packaging
+1. Editable domain cards and inspector.
+2. Real asset records and image/video shapes.
+3. Explicit workflow bindings compiled into the execution graph.
+4. Result comparison, version stacks, and provenance.
+5. Agent task lifecycle and streamed activity.
+6. Export, backup, and project bundle format.
 
-Use `electron-builder`.
+## Phase 4: Agent Runtime
 
-Minimum targets:
+- move runner into an Electron worker or child process
+- durable queue with cancellation, retries, and crash recovery
+- provider adapters stay behind worker boundaries
+- task inputs and outputs reference immutable snapshots/assets
+- all privileged actions produce audit records
 
-- NSIS installer for Windows
-- unpacked dev build
-- signed build later
-- auto-update only after the app has a stable release channel
+## Phase 5: Windows Release
 
-## Avoid For Now
+- tldraw commercial or approved production license
+- NSIS installer
+- Windows `.ico` application and installer assets
+- x64 baseline; arm64 only after demand is proven
+- signing certificate and release channel
+- clean-machine install/uninstall test
+- offline test
+- recovery test after forced termination during autosave and during a task
 
-- do not rewrite the full app in Rust
-- do not turn image generation into the only product workflow
-- do not couple tldraw shape data directly to provider-specific generation payloads
-- do not let the renderer own SQLite or filesystem access
+## Explicit Non-Goals
+
+- no Rust rewrite
+- no image-generation-only workflow
+- no direct renderer access to SQLite or filesystem
+- no multiplayer before single-user local persistence is proven
+- no automatic tldraw major-version upgrade before snapshot migration fixtures exist

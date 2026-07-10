@@ -10,8 +10,9 @@ import {
     EdgeChange
 } from '@xyflow/react';
 import { v4 as uuidv4 } from 'uuid';
-import { getPortTypeForHandle, isPortCompatible, type PortType } from '@/types/skills';
+import { getPortTypeForHandle, isPortCompatible } from '@/types/skills';
 import { subscribeFromEdge, unsubscribeFromEdge, syncSubscriptionsFromEdges, useSnapshotStore, type OutputSnapshot, type PortKey, type StaleState, type Subscription } from './snapshotStore';
+import { getDesktopBridge } from '@/lib/desktop/bridge';
 
 export type NodeStatus = 'idle' | 'running' | 'success' | 'fail';
 
@@ -708,26 +709,24 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     loadFromServer: async (projectId: string) => {
         try {
             set({ historyPaused: true, historyPast: [], historyFuture: [] });
-            const response = await fetch(`/api/projects/${projectId}/graph`);
-            const result = await response.json();
+            const graph = await getDesktopBridge().loadGraph(projectId);
 
-            if (!result.success) {
-                console.error('Failed to load graph:', result.error);
+            if (!graph) {
+                console.error('Failed to load graph: graph not found');
+                set({ historyPaused: false });
                 return false;
             }
 
-            const { graph_snapshot, viewport, version } = result.data;
-
-            const nextNodes = (graph_snapshot.nodes || []) as SkillNode[];
-            const nextEdges = (graph_snapshot.edges || []) as SkillEdge[];
+            const nextNodes = (graph.graphSnapshot.nodes || []) as SkillNode[];
+            const nextEdges = (graph.graphSnapshot.edges || []) as SkillEdge[];
 
             // Restore nodes and edges
             set({
                 projectId,
                 nodes: nextNodes,
                 edges: nextEdges,
-                viewport: viewport || { x: 0, y: 0, zoom: 1 },
-                lastSavedVersion: version,
+                viewport: graph.viewport || { x: 0, y: 0, zoom: 1 },
+                lastSavedVersion: graph.version,
                 saveStatus: 'saved',
                 isDirty: false,
                 selectedNodeId: null,
@@ -766,23 +765,18 @@ export const useGraphStore = create<GraphState>((set, get) => ({
         try {
             const graphSnapshot = getGraphSnapshot();
 
-            const response = await fetch(`/api/projects/${projectId}/graph`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    base_version: lastSavedVersion,
-                    graph_snapshot: graphSnapshot,
-                    viewport,
-                    force,
-                }),
+            const result = await getDesktopBridge().saveGraph({
+                projectId,
+                baseVersion: lastSavedVersion,
+                graphSnapshot,
+                viewport,
+                force,
             });
-
-            const result = await response.json();
 
             if (!result.success) {
                 if (result.conflict) {
                     set({ saveStatus: 'conflict' });
-                    console.warn('Version conflict detected, server version:', result.server_version);
+                    console.warn('Version conflict detected, server version:', result.serverVersion);
                     return false;
                 }
                 set({ saveStatus: 'error' });
@@ -791,7 +785,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
             }
 
             set({
-                lastSavedVersion: result.data.version,
+                lastSavedVersion: result.version ?? lastSavedVersion,
                 saveStatus: 'saved',
                 isDirty: false,
             });

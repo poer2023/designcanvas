@@ -8,6 +8,7 @@ import type { Project } from '@/types';
 import { useTranslation } from '@/lib/i18n';
 import { getBuiltInSpaceTemplate } from '@/lib/builtInTemplates';
 import { importTemplate } from '@/lib/templateUtils';
+import { getDesktopBridge } from '@/lib/desktop/bridge';
 
 export default function SpacesPage() {
   const router = useRouter();
@@ -31,11 +32,7 @@ export default function SpacesPage() {
 
   async function fetchSpaces() {
     try {
-      const response = await fetch('/api/projects');
-      const data = await response.json();
-      if (data.success) {
-        setSpaces(data.data);
-      }
+      setSpaces(await getDesktopBridge().listProjects());
     } catch (error) {
       console.error('Failed to fetch spaces:', error);
     } finally {
@@ -46,17 +43,10 @@ export default function SpacesPage() {
   async function handleCreateSpace(formData: { name: string; description?: string }) {
     setCreating(true);
     try {
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-      const data = await response.json();
-      if (data.success) {
-        setSpaces(prev => [data.data, ...prev]);
-        setShowCreateDialog(false);
-        router.push(`/projects/${data.data.id}`);
-      }
+      const project = await getDesktopBridge().createProject(formData);
+      setSpaces(prev => [project, ...prev]);
+      setShowCreateDialog(false);
+      router.push(`/projects/${project.id}/canvas`);
     } catch (error) {
       console.error('Failed to create space:', error);
     } finally {
@@ -75,15 +65,7 @@ export default function SpacesPage() {
         return;
       }
 
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description }),
-      });
-      const data = await response.json();
-      if (!data.success) return;
-
-      const project = data.data as Project;
+      const project = await getDesktopBridge().createProject({ name, description });
       setSpaces(prev => [project, ...prev]);
 
       const { nodes, edges } = importTemplate(template, {
@@ -92,17 +74,15 @@ export default function SpacesPage() {
         offsetY: 0,
       });
 
-      await fetch(`/api/projects/${project.id}/graph`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          graph_snapshot: { nodes, edges },
-          viewport: template.graph.viewport || { x: 0, y: 0, zoom: 1 },
-          force: true,
-        }),
+      await getDesktopBridge().saveGraph({
+        projectId: project.id,
+        baseVersion: 0,
+        graphSnapshot: { nodes, edges },
+        viewport: template.graph.viewport || { x: 0, y: 0, zoom: 1 },
+        force: true,
       });
 
-      router.push(`/projects/${project.id}`);
+      router.push(`/projects/${project.id}/canvas`);
     } catch (error) {
       console.error('Failed to create space from template:', error);
     } finally {
@@ -114,7 +94,7 @@ export default function SpacesPage() {
     if (!confirm(t('spaces.deleteConfirm'))) return;
 
     try {
-      await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+      await getDesktopBridge().deleteProject(id);
       setSpaces(spaces.filter(s => s.id !== id));
     } catch (error) {
       console.error('Failed to delete space:', error);
@@ -242,7 +222,7 @@ export default function SpacesPage() {
                     className="group relative"
                   >
                     <button
-                      onClick={() => router.push(`/projects/${space.id}`)}
+                      onClick={() => router.push(`/projects/${space.id}/canvas`)}
                       className="
                                                 w-full p-4 rounded-xl border border-[var(--border-subtle)]
                                                 bg-[var(--bg-card)] hover:bg-[var(--bg-hover)]

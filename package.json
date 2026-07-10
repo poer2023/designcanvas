@@ -1,24 +1,40 @@
 {
   "name": "designcanvas",
   "version": "0.1.0",
+  "description": "Local-first AI design workspace with an infinite canvas",
+  "author": "DesignCanvas Contributors",
   "private": true,
+  "main": "desktop/main.cjs",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.12.0 <25"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "desktop:dev": "concurrently -k -n next,electron -c blue,magenta \"pnpm dev\" \"wait-on http://127.0.0.1:3000 && electron desktop/main.cjs\"",
-    "desktop:preview": "pnpm build && concurrently -k -n next,electron -c blue,magenta \"pnpm start\" \"wait-on http://127.0.0.1:3000 && electron desktop/main.cjs\"",
-    "desktop:dist": "pnpm build && electron-builder --config electron-builder.yml"
+    "desktop:renderer:dev": "node desktop/scripts/electron-node.cjs node_modules/next/dist/bin/next dev",
+    "desktop:renderer:preview": "node desktop/scripts/electron-node.cjs node_modules/next/dist/bin/next start",
+    "desktop:dev": "concurrently -k -n next,electron -c blue,magenta \"pnpm desktop:renderer:dev\" \"wait-on http://127.0.0.1:3000 && electron desktop/main.cjs\"",
+    "desktop:preview": "pnpm build && concurrently -k -n next,electron -c blue,magenta \"pnpm desktop:renderer:preview\" \"wait-on http://127.0.0.1:3000 && electron desktop/main.cjs\"",
+    "desktop:rebuild": "electron-builder install-app-deps",
+    "desktop:prepare-renderer": "node desktop/scripts/prepare-renderer.cjs",
+    "desktop:dist": "pnpm build && pnpm desktop:prepare-renderer && electron-builder --config electron-builder.yml",
+    "desktop:dist:win": "pnpm build && pnpm desktop:prepare-renderer && electron-builder --config electron-builder.yml --win --x64",
+    "typecheck": "tsc --noEmit",
+    "test:desktop": "node desktop/scripts/electron-node.cjs --test desktop/services/database.test.cjs"
   },
   "dependencies": {
+    "@tldraw/tlschema": "4.5.8",
     "@xyflow/react": "^12.10.0",
-    "better-sqlite3": "^12.5.0",
+    "better-sqlite3": "^12.11.1",
     "lucide-react": "^0.561.0",
-    "next": "16.0.10",
+    "next": "16.2.10",
     "next-themes": "^0.4.6",
-    "react": "19.2.1",
-    "react-dom": "19.2.1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "tldraw": "4.5.8",
     "uuid": "^13.0.0",
     "zustand": "^5.0.9"
   },

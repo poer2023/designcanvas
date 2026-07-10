@@ -3,7 +3,9 @@ import path from 'path';
 import fs from 'fs';
 
 // Database file location
-const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = process.env.DESIGNCANVAS_DATA_DIR
+    ? path.resolve(process.env.DESIGNCANVAS_DATA_DIR)
+    : path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DATA_DIR, 'posterlab.db');
 
 // Ensure data directory exists
