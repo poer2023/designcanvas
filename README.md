@@ -33,7 +33,7 @@ The main freeform canvas uses the same core canvas SDK family observed in Lovart
 - Lovart-style Agent composer as the primary right-panel interaction
 - selected-node prompts create a downstream iteration card and connect it automatically
 - generation parameters are available only in a collapsed contextual inspector
-- visible card input/output ports create tldraw arrow bindings without requiring toolbar discovery
+- visible card input/output ports support ComfyUI-style drag-to-connect and click-to-connect without requiring toolbar discovery
 - tldraw arrow bindings compile into a directed generation graph with cycle validation
 - run-all and run-from-selected execution with text context, image references, and seed propagation
 - execution graph snapshot persisted to `project_graphs` before each run

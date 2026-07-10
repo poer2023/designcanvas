@@ -58,7 +58,7 @@ Zustand
   transient UI state only
 ```
 
-Canvas shapes must reference heavy assets by ID. Visible input/output ports create explicit tldraw arrow bindings, which are compiled into `project_graphs` before each run; freeform visual position is never an execution dependency. Generation-to-generation edges pass output asset references, image URLs, and seeds into downstream `img2img` parameters.
+Canvas shapes must reference heavy assets by ID. Dragging a visible right output port onto a left input port shows a live connection preview and creates an explicit tldraw arrow binding; click-output then click-input is retained as a fallback. These bindings are compiled into `project_graphs` before each run, and freeform visual position is never an execution dependency. Generation-to-generation edges pass output asset references, image URLs, and seeds into downstream `img2img` parameters.
 
 ## Native Database
 

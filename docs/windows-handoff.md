@@ -62,7 +62,7 @@ Set `DESIGNCANVAS_OPEN_DEVTOOLS=1` before the desktop command only when DevTools
 5. Add brief, note, asset, task, and generation cards.
 6. Resize and move cards; use undo and redo.
 7. Draw, add text, and create a frame.
-8. Connect a card's right output port to a generation card's left input port and confirm the Agent panel shows one valid connection.
+8. Drag a card's right output port onto a generation card's left input port; confirm the live curve turns blue over the target and the Agent panel shows one valid connection after release.
 9. Select a generation node, submit an iteration through the Agent composer, and confirm a connected downstream node appears.
 10. Run all nodes, then edit the downstream node through the collapsed inspector and run from the selected node; confirm both result previews update.
 11. Add a reverse connection, confirm cycle validation blocks execution, then undo it.

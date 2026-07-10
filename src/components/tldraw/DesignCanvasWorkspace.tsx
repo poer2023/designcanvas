@@ -43,16 +43,29 @@ import {
   DESIGN_CARD_PORT_EVENT,
   designCardShapeUtils,
   type DesignCardKind,
-  type DesignCardPortRole,
+  type DesignCardPortEventDetail,
   type DesignCardShape,
 } from './DesignCardShape';
 import CanvasSidePanel, { type GenerationCardInput } from './CanvasSidePanel';
 
 type SaveStatus = 'saved' | 'saving' | 'error' | 'conflict';
 
+interface ConnectionDragState {
+  sourceId: TLShapeId;
+  start: { x: number; y: number };
+  current: { x: number; y: number };
+  targetId?: TLShapeId;
+}
+
 const TLDRAW_SCHEMA_VERSION = 'tldraw-4.5';
 const tldrawLicenseKey = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 const tldrawOptions = { maxPages: 1 } as const;
+
+function getConnectionPreviewPath({ start, current }: ConnectionDragState) {
+  const direction = current.x >= start.x ? 1 : -1;
+  const controlOffset = Math.max(72, Math.abs(current.x - start.x) * 0.45);
+  return `M ${start.x} ${start.y} C ${start.x + controlOffset * direction} ${start.y}, ${current.x - controlOffset * direction} ${current.y}, ${current.x} ${current.y}`;
+}
 
 const cardPresets: Record<DesignCardKind, Pick<DesignCardShape['props'], 'title' | 'body' | 'eyebrow'>> = {
   brief: {
@@ -349,6 +362,9 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
   const [editor, setEditor] = useState<Editor | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
   const [pendingConnectionSourceId, setPendingConnectionSourceId] = useState<TLShapeId | null>(null);
+  const pendingConnectionSourceRef = useRef<TLShapeId | null>(null);
+  const [connectionDrag, setConnectionDrag] = useState<ConnectionDragState | null>(null);
+  const connectionDragRef = useRef<ConnectionDragState | null>(null);
   const [connectionMessage, setConnectionMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const versionRef = useRef(0);
@@ -527,34 +543,80 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
 
   useEffect(() => {
     if (!editor) return;
+    const updatePendingConnection = (shapeId: TLShapeId | null) => {
+      pendingConnectionSourceRef.current = shapeId;
+      setPendingConnectionSourceId(shapeId);
+    };
+    const updateConnectionDrag = (drag: ConnectionDragState | null) => {
+      connectionDragRef.current = drag;
+      setConnectionDrag(drag);
+    };
+    const showConnectionResult = (text: string, error = false) => {
+      setConnectionMessage({ text, error: error || undefined });
+      if (!error) window.setTimeout(() => setConnectionMessage(null), 1400);
+    };
+    const createConnection = (sourceId: TLShapeId, targetId: TLShapeId) => {
+      try {
+        connectDesignCards(editor, sourceId, targetId);
+        updatePendingConnection(null);
+        showConnectionResult('连接已创建');
+      } catch (error) {
+        showConnectionResult(error instanceof Error ? error.message : '创建连接失败', true);
+      }
+    };
     const handlePort = (event: Event) => {
-      const detail = (event as CustomEvent<{ shapeId: TLShapeId; role: DesignCardPortRole }>).detail;
-      if (!detail?.shapeId || !detail.role) return;
+      const detail = (event as CustomEvent<DesignCardPortEventDetail>).detail;
+      if (!detail?.shapeId || !detail.role || !detail.phase) return;
+      if (detail.phase === 'drag-start') {
+        if (detail.clientX === undefined || detail.clientY === undefined) return;
+        editor.setCurrentTool('select');
+        updatePendingConnection(null);
+        setConnectionMessage(null);
+        connectionDragRef.current = {
+          sourceId: detail.shapeId,
+          start: { x: detail.clientX, y: detail.clientY },
+          current: { x: detail.clientX, y: detail.clientY },
+        };
+        return;
+      }
+      if (detail.phase === 'drag-move') {
+        const activeDrag = connectionDragRef.current;
+        if (!activeDrag || detail.clientX === undefined || detail.clientY === undefined) return;
+        updateConnectionDrag({
+          ...activeDrag,
+          current: { x: detail.clientX, y: detail.clientY },
+          targetId: detail.targetShapeId,
+        });
+        return;
+      }
+      if (detail.phase === 'drag-cancel') {
+        updateConnectionDrag(null);
+        return;
+      }
+      if (detail.phase === 'drag-end') {
+        const sourceId = connectionDragRef.current?.sourceId ?? detail.shapeId;
+        updateConnectionDrag(null);
+        if (detail.targetShapeId) createConnection(sourceId, detail.targetShapeId);
+        return;
+      }
+      if (detail.phase !== 'click') return;
       if (detail.role === 'output') {
         editor.setCurrentTool('select');
-        setPendingConnectionSourceId(detail.shapeId);
+        updatePendingConnection(detail.shapeId);
         setConnectionMessage(null);
         return;
       }
-      if (!pendingConnectionSourceId) {
+      const sourceId = pendingConnectionSourceRef.current;
+      if (!sourceId) {
         setConnectionMessage({ text: '请先选择一个右侧输出端口', error: true });
         return;
       }
-      try {
-        connectDesignCards(editor, pendingConnectionSourceId, detail.shapeId);
-        setPendingConnectionSourceId(null);
-        setConnectionMessage({ text: '连接已创建' });
-        window.setTimeout(() => setConnectionMessage(null), 1400);
-      } catch (error) {
-        setConnectionMessage({
-          text: error instanceof Error ? error.message : '创建连接失败',
-          error: true,
-        });
-      }
+      createConnection(sourceId, detail.shapeId);
     };
     const cancelConnection = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      setPendingConnectionSourceId(null);
+      updatePendingConnection(null);
+      updateConnectionDrag(null);
       setConnectionMessage(null);
     };
     window.addEventListener(DESIGN_CARD_PORT_EVENT, handlePort);
@@ -563,7 +625,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
       window.removeEventListener(DESIGN_CARD_PORT_EVENT, handlePort);
       window.removeEventListener('keydown', cancelConnection);
     };
-  }, [editor, pendingConnectionSourceId]);
+  }, [editor]);
 
   if (loading || !project) {
     return (
@@ -574,7 +636,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
   }
 
   return (
-    <div className="dc-workspace" data-connecting={pendingConnectionSourceId ? true : undefined}>
+    <div className="dc-workspace" data-connecting={pendingConnectionSourceId || connectionDrag ? true : undefined}>
       <header className="dc-topbar">
         <div className="dc-topbar-left">
           <button type="button" className="dc-topbar-icon" onClick={() => router.push('/')} aria-label="返回项目" title="返回项目">
@@ -608,12 +670,26 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
             options={tldrawOptions}
           />
           {editor ? <CanvasControls editor={editor} /> : null}
+          {connectionDrag ? (
+            <svg className="dc-connection-preview" aria-hidden="true">
+              <path d={getConnectionPreviewPath(connectionDrag)} data-target={connectionDrag.targetId ? true : undefined} />
+              <circle cx={connectionDrag.current.x} cy={connectionDrag.current.y} r="5" data-target={connectionDrag.targetId ? true : undefined} />
+            </svg>
+          ) : null}
           {pendingConnectionSourceId || connectionMessage ? (
             <div className="dc-connection-message" data-error={connectionMessage?.error || undefined}>
               <Cable size={15} />
               <span>{connectionMessage?.text || '选择目标节点的左侧输入端口'}</span>
               {pendingConnectionSourceId ? (
-                <button type="button" aria-label="取消连接" title="取消连接" onClick={() => setPendingConnectionSourceId(null)}>
+                <button
+                  type="button"
+                  aria-label="取消连接"
+                  title="取消连接"
+                  onClick={() => {
+                    pendingConnectionSourceRef.current = null;
+                    setPendingConnectionSourceId(null);
+                  }}
+                >
                   <X size={14} />
                 </button>
               ) : null}

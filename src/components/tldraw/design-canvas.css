@@ -973,13 +973,49 @@
   color: #ffffff;
   background: #252523;
 }
-.dc-card-port:hover { border-color: #252523; color: #252523; transform: translateY(-50%) scale(1.14); }
+.dc-card-port:hover { transform: translateY(-50%) scale(1.14); }
+.dc-card-port--input:hover {
+  border-color: #4f70b7;
+  color: #4f70b7;
+  box-shadow: 0 0 0 5px rgba(79, 112, 183, 0.16);
+}
+.dc-card-port--output:hover { border-color: #252523; color: #ffffff; }
+.dc-card-port--output:active { cursor: grabbing; }
 
 .dc-workspace[data-connecting] .dc-card-port--input {
   border-color: #4f70b7;
   color: #4f70b7;
   box-shadow: 0 0 0 4px rgba(79, 112, 183, 0.14);
 }
+
+.dc-connection-preview {
+  width: 100vw;
+  height: 100vh;
+  position: fixed;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 54;
+}
+
+.dc-connection-preview path {
+  fill: none;
+  stroke: #252523;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 2px 3px rgba(32, 32, 29, 0.18));
+}
+
+.dc-connection-preview path[data-target] { stroke: #4f70b7; }
+
+.dc-connection-preview circle {
+  fill: #252523;
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+
+.dc-connection-preview circle[data-target] { fill: #4f70b7; }
 
 .dc-connection-message {
   min-height: 34px;

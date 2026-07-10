@@ -11,7 +11,7 @@ DesignCanvas is a Windows-first, local-first design workspace. The infinite canv
 - `canvas_documents` owns tldraw document and session snapshots.
 - `project_graphs` owns executable workflow dependencies. Do not use canvas coordinates as execution semantics.
 - tldraw arrows are the user-facing workflow bindings. Compile their shape bindings into `project_graphs` before execution; never infer dependencies from card proximity or position.
-- Card ports are the primary connection affordance. The generic arrow tool may remain available, but users must not need to discover it before they can build a workflow.
+- Card ports are the primary connection affordance. Dragging a right output port onto a left input port must show a live curve preview and create the bound workflow arrow; click-output then click-input remains an accessibility fallback. The generic arrow tool may remain available, but users must not need to discover it before they can build a workflow.
 - The tldraw workspace is the only user-facing editor. Do not expose archived React Flow routes or navigation.
 - Generation is represented by lightweight canvas cards; actual provider execution belongs to workers and job storage.
 - The right panel has only Agent and Assets modes. Generation nodes and their parameters belong inside Agent, not in a separate application mode.

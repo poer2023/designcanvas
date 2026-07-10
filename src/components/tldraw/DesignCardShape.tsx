@@ -6,11 +6,22 @@ import {
   type TLShape,
 } from 'tldraw';
 import { ImageIcon, Sparkles } from 'lucide-react';
+import { useRef } from 'react';
 
 export const DESIGN_CARD_TYPE = 'design-card' as const;
 export const DESIGN_CARD_PORT_EVENT = 'designcanvas:card-port';
 export type DesignCardKind = 'brief' | 'note' | 'asset' | 'task' | 'generate';
 export type DesignCardPortRole = 'input' | 'output';
+export type DesignCardPortPhase = 'click' | 'drag-start' | 'drag-move' | 'drag-end' | 'drag-cancel';
+
+export interface DesignCardPortEventDetail {
+  phase: DesignCardPortPhase;
+  shapeId: DesignCardShape['id'];
+  role: DesignCardPortRole;
+  clientX?: number;
+  clientY?: number;
+  targetShapeId?: DesignCardShape['id'];
+}
 
 export interface DesignCardProps {
   w: number;
@@ -67,24 +78,85 @@ function ConnectionPort({
   role: DesignCardPortRole;
   title: string;
 }) {
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const didDragRef = useRef(false);
   const label = role === 'output' ? `从“${title}”连接` : `连接到“${title}”`;
+  const dispatchPortEvent = (detail: Omit<DesignCardPortEventDetail, 'shapeId' | 'role'>) => {
+    window.dispatchEvent(new CustomEvent(DESIGN_CARD_PORT_EVENT, {
+      detail: { ...detail, shapeId, role } satisfies DesignCardPortEventDetail,
+    }));
+  };
   return (
     <button
       type="button"
       className={`dc-card-port dc-card-port--${role}`}
       data-connection-port={role}
+      data-connection-shape-id={shapeId}
       aria-label={label}
       title={label}
       onPointerDown={(event) => {
         event.preventDefault();
         event.stopPropagation();
+        if (role !== 'output') return;
+        dragStartRef.current = { x: event.clientX, y: event.clientY };
+        didDragRef.current = false;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dispatchPortEvent({ phase: 'drag-start', clientX: event.clientX, clientY: event.clientY });
+      }}
+      onPointerMove={(event) => {
+        const start = dragStartRef.current;
+        if (!start || role !== 'output') return;
+        if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4) {
+          didDragRef.current = true;
+        }
+        if (!didDragRef.current) return;
+        const targetPort = document
+          .elementFromPoint(event.clientX, event.clientY)
+          ?.closest<HTMLElement>('[data-connection-port="input"]');
+        dispatchPortEvent({
+          phase: 'drag-move',
+          clientX: event.clientX,
+          clientY: event.clientY,
+          targetShapeId: targetPort?.dataset.connectionShapeId as DesignCardShape['id'] | undefined,
+        });
+      }}
+      onPointerUp={(event) => {
+        if (!dragStartRef.current || role !== 'output') return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        dragStartRef.current = null;
+        if (!didDragRef.current) {
+          dispatchPortEvent({ phase: 'drag-cancel' });
+          return;
+        }
+        const targetPort = document
+          .elementFromPoint(event.clientX, event.clientY)
+          ?.closest<HTMLElement>('[data-connection-port="input"]');
+        const targetShapeId = targetPort?.dataset.connectionShapeId as DesignCardShape['id'] | undefined;
+        dispatchPortEvent({
+          phase: targetShapeId ? 'drag-end' : 'drag-cancel',
+          clientX: event.clientX,
+          clientY: event.clientY,
+          targetShapeId,
+        });
+      }}
+      onPointerCancel={(event) => {
+        if (!dragStartRef.current || role !== 'output') return;
+        dragStartRef.current = null;
+        didDragRef.current = false;
+        dispatchPortEvent({ phase: 'drag-cancel', clientX: event.clientX, clientY: event.clientY });
       }}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        window.dispatchEvent(new CustomEvent(DESIGN_CARD_PORT_EVENT, {
-          detail: { shapeId, role },
-        }));
+        if (didDragRef.current) {
+          didDragRef.current = false;
+          return;
+        }
+        dispatchPortEvent({ phase: 'click' });
       }}
     >
       <span />
