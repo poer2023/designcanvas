@@ -23,8 +23,8 @@ Electron preload
 React renderer
   project library
   tldraw freeform canvas
-  legacy workflow view
-  agent/task panel
+  agent / generation / asset modes
+  archived editors excluded from navigation
 ```
 
 `contextIsolation` is enabled and `nodeIntegration` is disabled. The renderer never imports `better-sqlite3`, `fs`, `path`, `child_process`, or Electron APIs.

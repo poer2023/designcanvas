@@ -1,279 +1,202 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Layers, Sparkles, Loader2, Trash2 } from 'lucide-react';
-import CreateProjectDialog from '@/components/projects/CreateProjectDialog';
-import type { Project } from '@/types';
-import { useTranslation } from '@/lib/i18n';
-import { getBuiltInSpaceTemplate } from '@/lib/builtInTemplates';
-import { importTemplate } from '@/lib/templateUtils';
+import {
+  ArrowUp,
+  Clock3,
+  FolderOpen,
+  Home,
+  Layers3,
+  LoaderCircle,
+  Monitor,
+  Plus,
+  Sparkles,
+  Trash2,
+} from 'lucide-react';
 import { getDesktopBridge } from '@/lib/desktop/bridge';
+import type { DesktopProject } from '@/lib/desktop/types';
+import styles from './home.module.css';
 
-export default function SpacesPage() {
+function projectTitleFromPrompt(prompt: string) {
+  const firstPhrase = prompt.split(/[，。！？!?\n]/)[0]?.trim();
+  return firstPhrase?.slice(0, 28) || `新项目 ${new Date().toLocaleDateString('zh-CN')}`;
+}
+
+export default function HomePage() {
   const router = useRouter();
-  const [spaces, setSpaces] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<DesktopProject[]>([]);
+  const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(true);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [creating, setCreating] = useState(false);
-  const { t } = useTranslation();
-
-  // Template data with translation keys
-  const templates = [
-    { id: 'poster-batch', nameKey: 'spaces.templateItems.posterBatch.name', descKey: 'spaces.templateItems.posterBatch.description', tags: ['general', 'multi-poster'] },
-    { id: 'music-festival', nameKey: 'spaces.templateItems.musicFestival.name', descKey: 'spaces.templateItems.musicFestival.description', tags: ['music', 'festival'] },
-    { id: 'tech-promo', nameKey: 'spaces.templateItems.techPromo.name', descKey: 'spaces.templateItems.techPromo.description', tags: ['tech', 'promo'] },
-    { id: 'social-story', nameKey: 'spaces.templateItems.socialStory.name', descKey: 'spaces.templateItems.socialStory.description', tags: ['social', 'story'] },
-  ];
 
   useEffect(() => {
-    fetchSpaces();
+    let cancelled = false;
+    getDesktopBridge().listProjects()
+      .then((items) => {
+        if (!cancelled) setProjects(items);
+      })
+      .catch((error) => console.error('Failed to load projects:', error))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
-  async function fetchSpaces() {
-    try {
-      setSpaces(await getDesktopBridge().listProjects());
-    } catch (error) {
-      console.error('Failed to fetch spaces:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleCreateSpace(formData: { name: string; description?: string }) {
-    setCreating(true);
-    try {
-      const project = await getDesktopBridge().createProject(formData);
-      setSpaces(prev => [project, ...prev]);
-      setShowCreateDialog(false);
-      router.push(`/projects/${project.id}/canvas`);
-    } catch (error) {
-      console.error('Failed to create space:', error);
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function handleUseTemplate(templateId: string, name: string, description: string) {
+  const createProject = async (initialPrompt?: string) => {
     if (creating) return;
+    const cleanPrompt = initialPrompt?.trim() || '';
     setCreating(true);
-
     try {
-      const template = getBuiltInSpaceTemplate(templateId);
-      if (!template) {
-        setShowCreateDialog(true);
-        return;
-      }
-
-      const project = await getDesktopBridge().createProject({ name, description });
-      setSpaces(prev => [project, ...prev]);
-
-      const { nodes, edges } = importTemplate(template, {
-        targetViewport: template.graph.viewport || { x: 0, y: 0, zoom: 1 },
-        offsetX: 0,
-        offsetY: 0,
+      const project = await getDesktopBridge().createProject({
+        name: projectTitleFromPrompt(cleanPrompt),
+        description: cleanPrompt || undefined,
       });
-
-      await getDesktopBridge().saveGraph({
-        projectId: project.id,
-        baseVersion: 0,
-        graphSnapshot: { nodes, edges },
-        viewport: template.graph.viewport || { x: 0, y: 0, zoom: 1 },
-        force: true,
-      });
-
       router.push(`/projects/${project.id}/canvas`);
     } catch (error) {
-      console.error('Failed to create space from template:', error);
-    } finally {
+      console.error('Failed to create project:', error);
       setCreating(false);
     }
-  }
+  };
 
-  async function handleDeleteSpace(id: string) {
-    if (!confirm(t('spaces.deleteConfirm'))) return;
-
+  const deleteProject = async (projectId: string) => {
+    if (!window.confirm('删除这个项目？此操作不可撤销。')) return;
     try {
-      await getDesktopBridge().deleteProject(id);
-      setSpaces(spaces.filter(s => s.id !== id));
+      await getDesktopBridge().deleteProject(projectId);
+      setProjects((current) => current.filter((project) => project.id !== projectId));
     } catch (error) {
-      console.error('Failed to delete space:', error);
+      console.error('Failed to delete project:', error);
     }
-  }
+  };
 
   return (
-    <>
-      {/* Header - matching Settings page style */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-1">{t('spaces.title')}</h1>
-          <p className="text-sm text-[var(--text-secondary)]">{t('spaces.description')}</p>
-        </div>
-        <button
-          onClick={() => setShowCreateDialog(true)}
-          className="
-                        h-9 px-4 rounded-lg text-sm font-medium
-                        bg-[var(--accent-primary)] text-white
-                        hover:bg-[var(--accent-hover)]
-                        flex items-center gap-2
-                        transition-colors
-                    "
-        >
-          <Plus size={16} />
-          {t('spaces.newSpace')}
+    <div className={styles.app}>
+      <aside className={styles.rail} aria-label="主导航">
+        <div className={styles.brandMark}><Layers3 size={18} /></div>
+        <button type="button" className={styles.railButton} data-active aria-label="主页" title="主页">
+          <Home size={18} />
         </button>
-      </div>
+        <button
+          type="button"
+          className={styles.railButton}
+          aria-label="项目"
+          title="项目"
+          onClick={() => document.getElementById('recent-projects')?.scrollIntoView({ behavior: 'smooth' })}
+        >
+          <FolderOpen size={18} />
+        </button>
+        <div className={styles.railSpacer} />
+        <div className={styles.localStatus} title="本地工作区"><Monitor size={16} /></div>
+      </aside>
 
-      <div className="max-w-5xl space-y-8">
-        {/* Templates Section */}
-        <section className="bg-[var(--bg-panel)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
-              <Sparkles size={16} className="text-violet-500" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">{t('spaces.templates.title')}</h2>
-              <p className="text-xs text-[var(--text-tertiary)]">{t('spaces.templates.description')}</p>
-            </div>
+      <main className={styles.main}>
+        <header className={styles.topbar}>
+          <div className={styles.wordmark}>DesignCanvas</div>
+          <div className={styles.workspaceBadge}>
+            <span />
+            Local workspace
           </div>
-          <div className="p-5">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {templates.map(template => (
+        </header>
+
+        <div className={styles.content}>
+          <section className={styles.start}>
+            <div className={styles.kicker}><Sparkles size={14} /> DESIGN WORKSPACE</div>
+            <h1>把想法放到画布上</h1>
+            <p>从一句目标开始，在同一张无限画布里完成简报、生成、素材整理与设计任务。</p>
+
+            <form
+              className={styles.composer}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void createProject(prompt);
+              }}
+            >
+              <textarea
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="描述你要完成的设计，例如：为新品发布制作一组社交媒体视觉"
+                rows={3}
+                aria-label="项目目标"
+              />
+              <div className={styles.composerFooter}>
                 <button
-                  key={template.id}
-                  onClick={() => handleUseTemplate(template.id, t(template.nameKey), t(template.descKey))}
+                  type="button"
+                  className={styles.iconButton}
+                  onClick={() => void createProject()}
                   disabled={creating}
-                  className="
-                                        p-4 rounded-xl border border-[var(--border-subtle)]
-                                        bg-[var(--bg-card)] hover:bg-[var(--bg-hover)]
-                                        text-left transition-colors
-                                        group
-                                    "
+                  aria-label="创建空白项目"
+                  title="创建空白项目"
                 >
-                  <div className="font-medium text-sm text-[var(--text-primary)] mb-1 group-hover:text-[var(--accent-primary)]">
-                    {t(template.nameKey)}
-                  </div>
-                  <div className="text-xs text-[var(--text-tertiary)] mb-3">
-                    {t(template.descKey)}
-                  </div>
-                  <div className="flex gap-1 flex-wrap">
-                    {template.tags.map(tag => (
-                      <span
-                        key={tag}
-                        className="px-2 py-0.5 text-[10px] rounded-full bg-[var(--bg-hover)] text-[var(--text-tertiary)]"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
+                  <Plus size={18} />
                 </button>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Recent Spaces Section */}
-        <section className="bg-[var(--bg-panel)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-teal-500/10 flex items-center justify-center">
-              <Layers size={16} className="text-teal-500" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                {t('spaces.recentSpaces.title')}
-                <span className="ml-2 px-1.5 py-0.5 rounded-md bg-[var(--bg-hover)] text-xs font-medium text-[var(--text-tertiary)]">
-                  {spaces.length}
-                </span>
-              </h2>
-              <p className="text-xs text-[var(--text-tertiary)]">{t('spaces.recentSpaces.description')}</p>
-            </div>
-          </div>
-          <div className="p-5">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 size={24} className="animate-spin text-[var(--text-tertiary)]" />
-              </div>
-            ) : spaces.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-12 h-12 rounded-xl bg-[var(--bg-hover)] flex items-center justify-center mx-auto mb-4">
-                  <Layers size={24} className="text-[var(--text-tertiary)]" />
-                </div>
-                <h3 className="font-medium text-[var(--text-primary)] mb-2">{t('spaces.noSpaces')}</h3>
-                <p className="text-sm text-[var(--text-tertiary)] mb-4">
-                  {t('spaces.noSpacesHint')}
-                </p>
+                <div className={styles.composerHint}>Brief · Generate · Assets · Tasks</div>
                 <button
-                  onClick={() => setShowCreateDialog(true)}
-                  className="
-                                        h-9 px-4 rounded-lg text-sm font-medium
-                                        bg-[var(--accent-primary)] text-white
-                                        hover:bg-[var(--accent-hover)]
-                                        transition-colors
-                                    "
+                  type="submit"
+                  className={styles.submitButton}
+                  disabled={creating || !prompt.trim()}
+                  aria-label="开始"
+                  title="开始"
                 >
-                  {t('spaces.createSpace')}
+                  {creating ? <LoaderCircle className={styles.spin} size={18} /> : <ArrowUp size={18} />}
                 </button>
               </div>
+            </form>
+          </section>
+
+          <section id="recent-projects" className={styles.projects}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <h2>最近项目</h2>
+                <span>{projects.length} 个本地项目</span>
+              </div>
+              <button type="button" className={styles.newProjectButton} onClick={() => void createProject()} disabled={creating}>
+                <Plus size={16} />
+                新建项目
+              </button>
+            </div>
+
+            {loading ? (
+              <div className={styles.emptyState}><LoaderCircle className={styles.spin} size={22} /></div>
+            ) : projects.length === 0 ? (
+              <button type="button" className={styles.emptyState} onClick={() => void createProject()}>
+                <Plus size={20} />
+                创建第一个画布
+              </button>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {spaces.map(space => (
-                  <div
-                    key={space.id}
-                    className="group relative"
-                  >
+              <div className={styles.projectGrid}>
+                {projects.map((project, index) => (
+                  <article key={project.id} className={styles.projectCard}>
                     <button
-                      onClick={() => router.push(`/projects/${space.id}/canvas`)}
-                      className="
-                                                w-full p-4 rounded-xl border border-[var(--border-subtle)]
-                                                bg-[var(--bg-card)] hover:bg-[var(--bg-hover)]
-                                                text-left transition-colors
-                                            "
+                      type="button"
+                      className={styles.projectOpen}
+                      onClick={() => router.push(`/projects/${project.id}/canvas`)}
                     >
-                      {/* Cover */}
-                      <div className="aspect-[4/3] rounded-lg bg-gradient-to-br from-violet-500 to-indigo-500 mb-3 flex items-center justify-center">
-                        <span className="text-white text-xl font-bold">
-                          {space.name.substring(0, 2).toUpperCase()}
-                        </span>
+                      <div className={styles.projectPreview} data-tone={index % 4}>
+                        <span className={styles.previewCardOne} />
+                        <span className={styles.previewCardTwo} />
+                        <span className={styles.previewDot} />
                       </div>
-                      {/* Info */}
-                      <div className="font-medium text-sm text-[var(--text-primary)] truncate mb-1">
-                        {space.name}
-                      </div>
-                      <div className="text-xs text-[var(--text-tertiary)]">
-                        {new Date(space.updated_at).toLocaleDateString()}
+                      <div className={styles.projectMeta}>
+                        <strong>{project.name}</strong>
+                        <span><Clock3 size={12} /> {new Date(project.updated_at).toLocaleDateString('zh-CN')}</span>
                       </div>
                     </button>
-                    {/* Actions */}
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteSpace(space.id);
-                      }}
-                      className="
-                                                absolute top-2 right-2
-                                                p-1.5 rounded-lg
-                                                bg-[var(--bg-panel)]/80 backdrop-blur-sm
-                                                text-[var(--text-tertiary)] hover:text-red-500
-                                                opacity-0 group-hover:opacity-100
-                                                transition-all
-                                            "
+                      type="button"
+                      className={styles.deleteButton}
+                      onClick={() => void deleteProject(project.id)}
+                      aria-label={`删除 ${project.name}`}
+                      title="删除项目"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={15} />
                     </button>
-                  </div>
+                  </article>
                 ))}
               </div>
             )}
-          </div>
-        </section>
-      </div>
-
-      <CreateProjectDialog
-        open={showCreateDialog}
-        onClose={() => setShowCreateDialog(false)}
-        onSubmit={handleCreateSpace}
-        loading={creating}
-      />
-    </>
+          </section>
+        </div>
+      </main>
+    </div>
   );
 }

@@ -18,6 +18,17 @@ When evidence conflicts, use this order:
 
 ## Stable Boundaries
 
+### One project surface
+
+Human law: Every design mode belongs inside the tldraw project workspace.
+
+Machine law:
+
+- Trigger: adding a user-facing project capability or route.
+- Required action: expose it as a canvas tool, domain card, inspector, or side-panel mode.
+- Evidence: `/projects/:id` redirects to `/projects/:id/canvas`; archived editors have no application navigation.
+- Exception: project library and native operating-system dialogs.
+
 ### Canvas and execution are separate
 
 Human law: Users may arrange work freely without accidentally changing what a workflow executes.
@@ -58,7 +69,7 @@ Human law: A project remains valuable when every generation provider is disabled
 Machine law:
 
 - Trigger: adding generation behavior.
-- Required action: implement it as a task/provider adapter whose outputs become assets.
+- Required action: capture intent in a lightweight generation card; execute through a task/provider adapter whose outputs become assets.
 - Evidence: briefs, notes, assets, layout, editing, and export remain usable offline.
 - Exception: none.
 
@@ -74,6 +85,7 @@ Machine law:
 
 - Electron can own project, execution graph, and tldraw document persistence.
 - A project opens in a real tldraw canvas with custom domain shapes.
+- Generation drafts can be added, saved, and restored without a provider connection.
 - Pan, zoom, selection, resize, draw, text, frame, undo, and redo work.
 - Canvas content and camera state survive reload.
 - The packaged build contains and starts its own Next standalone renderer.

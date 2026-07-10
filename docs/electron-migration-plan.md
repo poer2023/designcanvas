@@ -57,12 +57,13 @@ Exit criteria: opening, editing, and exporting an existing project works with th
 Implemented:
 
 - tldraw 4.5.8 route at `/projects/[id]/canvas`
-- custom brief, note, asset, and task shapes
+- custom brief, note, asset, task, and generation shapes
 - custom Lovart-like desktop shell and bottom toolbar
+- Agent, Generate, and Assets side-panel modes inside the canvas
 - pan, zoom, select, draw, text, frame, undo, and redo controls
 - document plus session/camera persistence
 - optimistic version conflict detection
-- legacy React Flow execution view retained at `/projects/[id]`
+- former React Flow source archived under `src/legacy`; former routes redirect to tldraw
 
 Next:
 

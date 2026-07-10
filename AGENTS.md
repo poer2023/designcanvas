@@ -10,6 +10,8 @@ DesignCanvas is a Windows-first, local-first design workspace. The infinite canv
 - The renderer never imports Node-only modules and never receives unrestricted Node access.
 - `canvas_documents` owns tldraw document and session snapshots.
 - `project_graphs` owns executable workflow dependencies. Do not use canvas coordinates as execution semantics.
+- The tldraw workspace is the only user-facing editor. Do not expose archived React Flow routes or navigation.
+- Generation is represented by lightweight canvas cards; actual provider execution belongs to workers and job storage.
 - Heavy binaries live in the asset store. Canvas shapes reference stable asset IDs.
 - Existing projects must open and remain editable without a network connection.
 - Provider-specific payloads stay behind adapters and workers, not in shape props.
@@ -22,6 +24,7 @@ The architecture has failed if any of these become true:
 - Opening or editing an existing local project requires a cloud service.
 - Renderer code accesses SQLite, filesystem paths, shell commands, or secrets directly.
 - A canvas library change requires rewriting project business data or execution history.
+- A feature requires leaving the tldraw project workspace for an older editor surface.
 - Pan, zoom, selection, or drag performance is accepted without a measured Windows baseline.
 - Autosave can silently lose more than two seconds of settled edits.
 - A Windows installer is called ready without a clean-machine smoke test.

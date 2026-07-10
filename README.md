@@ -17,7 +17,7 @@ Next.js / React renderer
 Independent execution graph + recipes + provider adapters
 ```
 
-The main freeform canvas uses the same core canvas SDK family observed in Lovart's current runtime: `tldraw`, pinned to `4.5.8` for the first interaction baseline. The legacy React Flow canvas remains available as the executable workflow compatibility view.
+The main freeform canvas uses the same core canvas SDK family observed in Lovart's current runtime: `tldraw`, pinned to `4.5.8` for the first interaction baseline. It is the only user-facing project workspace; the former React Flow implementation is archived under `src/legacy` and is not reachable in the application.
 
 ## Implemented Baseline
 
@@ -28,9 +28,10 @@ The main freeform canvas uses the same core canvas SDK family observed in Lovart
 - typed project, execution-graph, and canvas-document IPC
 - separate `canvas_documents` and `project_graphs` persistence
 - `/projects/[id]/canvas` tldraw workspace
-- custom design cards for briefs, notes, assets, and agent tasks
+- custom design cards for briefs, notes, assets, agent tasks, and generation drafts
+- canvas-local Agent, Generate, and Assets modes
 - debounced document and camera autosave with optimistic version checks
-- legacy `/projects/[id]` React Flow workflow view
+- hard redirects from former project and feature routes into the new workspace
 - Next.js 16.2.10 and React 19.2.7 security baseline
 
 ## Local Development

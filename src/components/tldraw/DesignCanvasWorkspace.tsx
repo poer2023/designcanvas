@@ -16,12 +16,10 @@ import {
   MousePointer2,
   PenLine,
   Redo2,
-  Send,
-  Sparkles,
   StickyNote,
   Type,
   Undo2,
-  Workflow,
+  WandSparkles,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -40,6 +38,7 @@ import {
   type DesignCardKind,
   type DesignCardShape,
 } from './DesignCardShape';
+import CanvasSidePanel, { type GenerationCardInput } from './CanvasSidePanel';
 
 type SaveStatus = 'saved' | 'saving' | 'error' | 'conflict';
 
@@ -68,7 +67,47 @@ const cardPresets: Record<DesignCardKind, Pick<DesignCardShape['props'], 'title'
     eyebrow: 'AGENT TASK',
     body: '可运行、可追踪、可复用的设计动作。',
   },
+  generate: {
+    title: '图像生成',
+    eyebrow: 'IMAGE DRAFT · 1:1',
+    body: '描述主体、构图、光线和视觉风格。',
+  },
 };
+
+function findOpenCardPosition(editor: Editor, size: { w: number; h: number }) {
+  const viewport = editor.getViewportPageBounds();
+  const center = viewport.center;
+  const existingBounds = editor.getCurrentPageShapes()
+    .map((shape) => editor.getShapePageBounds(shape))
+    .filter((bounds) => bounds !== undefined);
+  const columnStep = size.w + 52;
+  const rowStep = size.h + 52;
+  const offsets = [
+    [0, 0], [1, 0], [-1, 0], [0, 1], [0, -1],
+    [1, 1], [-1, 1], [1, -1], [-1, -1],
+    [2, 0], [-2, 0], [0, 2], [0, -2],
+  ];
+
+  for (const [column, row] of offsets) {
+    const candidate = {
+      x: center.x - size.w / 2 + column * columnStep,
+      y: center.y - size.h / 2 + row * rowStep,
+    };
+    const overlaps = existingBounds.some((bounds) => (
+      candidate.x < bounds.maxX + 28
+      && candidate.x + size.w > bounds.minX - 28
+      && candidate.y < bounds.maxY + 28
+      && candidate.y + size.h > bounds.minY - 28
+    ));
+    if (!overlaps) return candidate;
+  }
+
+  const pageBounds = editor.getCurrentPageBounds();
+  return {
+    x: (pageBounds?.maxX ?? center.x) + 72,
+    y: pageBounds?.minY ?? center.y - size.h / 2,
+  };
+}
 
 function createCard(
   editor: Editor,
@@ -77,30 +116,39 @@ function createCard(
   overrides?: Partial<Pick<DesignCardShape['props'], 'title' | 'body' | 'eyebrow'>>
 ) {
   const id = createShapeId();
-  const center = editor.getViewportPageBounds().center;
+  const size = kind === 'generate' ? { w: 360, h: 300 } : { w: 320, h: 188 };
+  const position = findOpenCardPosition(editor, size);
   editor.createShape<DesignCardShape>({
     id,
     type: DESIGN_CARD_TYPE,
-    x: center.x - 160 + offset.x,
-    y: center.y - 94 + offset.y,
+    x: position.x + offset.x,
+    y: position.y + offset.y,
     props: {
       ...cardPresets[kind],
       ...overrides,
       kind,
-      w: 320,
-      h: 188,
+      ...size,
     },
   });
   editor.select(id);
   editor.setCurrentTool('select');
+  const viewport = editor.getViewportPageBounds();
+  if (
+    position.x < viewport.minX
+    || position.y < viewport.minY
+    || position.x + size.w > viewport.maxX
+    || position.y + size.h > viewport.maxY
+  ) {
+    editor.zoomToSelection({ animation: { duration: 180 } });
+  }
 }
 
-function seedCanvas(editor: Editor) {
+function seedCanvas(editor: Editor, projectDescription?: string | null) {
   const seeds: Array<{ kind: DesignCardKind; x: number; y: number }> = [
-    { kind: 'brief', x: -380, y: -110 },
-    { kind: 'asset', x: 0, y: -110 },
-    { kind: 'task', x: 380, y: -110 },
-    { kind: 'note', x: 0, y: 130 },
+    { kind: 'brief', x: -420, y: -80 },
+    { kind: 'generate', x: -20, y: -130 },
+    { kind: 'asset', x: 400, y: -80 },
+    { kind: 'note', x: 20, y: 220 },
   ];
 
   editor.createShapes<DesignCardShape>(seeds.map(({ kind, x, y }) => ({
@@ -110,9 +158,11 @@ function seedCanvas(editor: Editor) {
     y,
     props: {
       ...cardPresets[kind],
+      ...(kind === 'brief' && projectDescription ? { body: projectDescription } : {}),
+      ...(kind === 'generate' && projectDescription ? { body: projectDescription } : {}),
       kind,
-      w: 320,
-      h: 188,
+      w: kind === 'generate' ? 360 : 320,
+      h: kind === 'generate' ? 300 : 188,
     },
   })));
   editor.zoomToFit({ animation: { duration: 240 } });
@@ -207,7 +257,10 @@ function CanvasControls({ editor }: { editor: Editor }) {
           <ImagePlus size={18} />
         </ToolButton>
         <ToolButton label="执行任务" onClick={() => createCard(editor, 'task')}>
-          <Sparkles size={18} />
+          <WandSparkles size={18} />
+        </ToolButton>
+        <ToolButton label="生成卡片" onClick={() => createCard(editor, 'generate')}>
+          <ImagePlus size={18} />
         </ToolButton>
         <span className="dc-toolbar-divider" />
         <ToolButton label="画笔" active={tool === 'draw'} onClick={() => setCurrentTool('draw')}>
@@ -263,76 +316,6 @@ function SaveIndicator({ status, onForceSave }: { status: SaveStatus; onForceSav
       {icon}
       <span>{labels[status]}</span>
     </button>
-  );
-}
-
-function AgentPanel({ editor }: { editor: Editor | null }) {
-  const tasks = ['整理画布', '提取风格', '生成版式', '检查一致性', '导出资产'];
-  const [prompt, setPrompt] = useState('');
-
-  const createTask = (title: string) => {
-    if (!editor) return;
-    createCard(editor, 'task', { x: 0, y: 0 }, {
-      title,
-      eyebrow: 'AGENT TASK',
-      body: prompt.trim() || '等待执行',
-    });
-    setPrompt('');
-  };
-
-  return (
-    <aside className="dc-agent-panel">
-      <div className="dc-agent-header">
-        <div>
-          <span className="dc-agent-kicker">DESIGN AGENT</span>
-          <h2>新任务</h2>
-        </div>
-        <div className="dc-agent-mark"><Sparkles size={16} /></div>
-      </div>
-
-      <div className="dc-agent-body">
-        <div className="dc-task-title">设计任务</div>
-        <div className="dc-task-grid">
-          {tasks.map((task) => (
-            <button
-              key={task}
-              type="button"
-              className="dc-task-chip"
-              disabled={!editor}
-              onClick={() => createTask(task)}
-            >
-              {task}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="dc-composer">
-        <textarea
-          aria-label="设计任务"
-          placeholder="输入设计目标..."
-          rows={4}
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-        />
-        <div className="dc-composer-footer">
-          <span className="dc-agent-mode">
-            <Sparkles size={15} />
-            Agent
-          </span>
-          <button
-            type="button"
-            className="dc-send-button"
-            aria-label="发送"
-            title="发送"
-            disabled={!editor || !prompt.trim()}
-            onClick={() => createTask(prompt.trim())}
-          >
-            <Send size={17} />
-          </button>
-        </div>
-      </div>
-    </aside>
   );
 }
 
@@ -441,7 +424,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
     listenerCleanupRef.current?.();
     setEditor(mountedEditor);
     if (!canvasDocument && mountedEditor.getCurrentPageShapes().length === 0) {
-      seedCanvas(mountedEditor);
+      seedCanvas(mountedEditor, project?.description);
     }
 
     const removeDocumentListener = mountedEditor.store.listen(
@@ -458,7 +441,39 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
     };
 
     if (!canvasDocument) queueSave(mountedEditor, 0);
-  }, [canvasDocument, queueSave]);
+  }, [canvasDocument, project?.description, queueSave]);
+
+  const createTaskCard = useCallback((title: string, body: string) => {
+    if (!editor) return;
+    createCard(editor, 'task', { x: 0, y: 0 }, {
+      title,
+      eyebrow: 'AGENT TASK',
+      body,
+    });
+  }, [editor]);
+
+  const createGenerationCard = useCallback((input: GenerationCardInput) => {
+    if (!editor) return;
+    const presetLabel = input.preset === 'poster-draft' ? 'POSTER DRAFT' : 'IMAGE DRAFT';
+    createCard(editor, 'generate', { x: 0, y: 0 }, {
+      title: input.preset === 'poster-draft' ? '海报生成' : '图像生成',
+      eyebrow: `${presetLabel} · ${input.ratio}`,
+      body: input.prompt,
+    });
+  }, [editor]);
+
+  const importAssets = useCallback(async () => {
+    if (!editor) return 0;
+    const assets = await getDesktopBridge().importAssets(projectId);
+    assets.forEach((asset, index) => {
+      createCard(editor, 'asset', { x: index * 28, y: index * 24 }, {
+        title: asset.name,
+        eyebrow: 'LOCAL ASSET',
+        body: '已复制到项目素材目录',
+      });
+    });
+    return assets.length;
+  }, [editor, projectId]);
 
   useEffect(() => {
     const flushWhenHidden = () => {
@@ -500,9 +515,6 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
             status={saveStatus}
             onForceSave={() => editor && void flushSave(editor, true)}
           />
-          <button type="button" className="dc-topbar-icon" onClick={() => router.push(`/projects/${projectId}`)} aria-label="执行图" title="执行图">
-            <Workflow size={17} />
-          </button>
         </div>
       </header>
 
@@ -518,7 +530,12 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
           />
           {editor ? <CanvasControls editor={editor} /> : null}
         </main>
-        <AgentPanel editor={editor} />
+        <CanvasSidePanel
+          ready={Boolean(editor)}
+          onCreateTask={createTaskCard}
+          onCreateGeneration={createGenerationCard}
+          onImportAssets={importAssets}
+        />
       </div>
     </div>
   );

@@ -5,9 +5,10 @@ import {
   type RecordProps,
   type TLShape,
 } from 'tldraw';
+import { ImageIcon, Sparkles } from 'lucide-react';
 
 export const DESIGN_CARD_TYPE = 'design-card' as const;
-export type DesignCardKind = 'brief' | 'note' | 'asset' | 'task';
+export type DesignCardKind = 'brief' | 'note' | 'asset' | 'task' | 'generate';
 
 export interface DesignCardProps {
   w: number;
@@ -31,6 +32,7 @@ const kindLabel: Record<DesignCardKind, string> = {
   note: 'NOTE',
   asset: 'ASSET',
   task: 'TASK',
+  generate: 'GENERATE',
 };
 
 export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
@@ -38,7 +40,7 @@ export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
   static override props: RecordProps<DesignCardShape> = {
     w: T.number,
     h: T.number,
-    kind: T.literalEnum('brief', 'note', 'asset', 'task'),
+    kind: T.literalEnum('brief', 'note', 'asset', 'task', 'generate'),
     title: T.string,
     body: T.string,
     eyebrow: T.string,
@@ -65,6 +67,29 @@ export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
 
   component(shape: DesignCardShape) {
     const { kind, title, body, eyebrow } = shape.props;
+    if (kind === 'generate') {
+      return (
+        <HTMLContainer
+          className="dc-generation-card"
+          data-testid="generation-card-shape"
+          style={{ pointerEvents: 'all' }}
+        >
+          <div className="dc-generation-card__preview">
+            <div className="dc-generation-card__symbol"><ImageIcon size={24} /></div>
+            <span><Sparkles size={12} /> GENERATION DRAFT</span>
+          </div>
+          <div className="dc-generation-card__content">
+            <div className="dc-generation-card__meta">
+              <span>{eyebrow}</span>
+              <span className="dc-generation-card__state">草稿</span>
+            </div>
+            <div className="dc-generation-card__title">{title}</div>
+            <div className="dc-generation-card__prompt">{body}</div>
+          </div>
+        </HTMLContainer>
+      );
+    }
+
     return (
       <HTMLContainer
         className="dc-design-card"
