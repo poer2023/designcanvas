@@ -28,7 +28,7 @@ The main freeform canvas uses the same core canvas SDK family observed in Lovart
 - typed project, execution-graph, and canvas-document IPC
 - separate `canvas_documents` and `project_graphs` persistence
 - `/projects/[id]/canvas` tldraw workspace
-- custom design cards for briefs, notes, assets, and agent tasks, plus lightweight image result cards
+- type-specific brief, note, asset, and agent-task shapes with inline editing, plus lightweight image result cards
 - collapsible canvas side panel with only Agent and Assets modes
 - lightweight bottom canvas composer as the primary from-scratch and selected-result generation entry
 - right panel defaults to collapsed and keeps execution history folded

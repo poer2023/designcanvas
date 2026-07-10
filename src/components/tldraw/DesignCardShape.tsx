@@ -3,11 +3,25 @@ import {
   HTMLContainer,
   T,
   useEditor,
+  useIsEditing,
   type RecordProps,
   type TLShape,
 } from 'tldraw';
-import { ImageIcon, LoaderCircle } from 'lucide-react';
-import { useEffect, useRef, type SyntheticEvent } from 'react';
+import {
+  FileText,
+  ImageIcon,
+  Images,
+  LoaderCircle,
+  StickyNote,
+  WandSparkles,
+} from 'lucide-react';
+import {
+  useEffect,
+  useRef,
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type SyntheticEvent,
+} from 'react';
 
 export const DESIGN_CARD_TYPE = 'design-card' as const;
 export const DESIGN_CARD_PORT_EVENT = 'designcanvas:card-port';
@@ -74,6 +88,25 @@ const generationStatusLabel: Record<NonNullable<DesignCardProps['status']>, stri
   running: '生成中',
   done: '完成',
   error: '失败',
+};
+
+const cardPlaceholders: Record<Exclude<DesignCardKind, 'generate'>, { title: string; body: string }> = {
+  brief: {
+    title: '项目简报',
+    body: '目标、受众、尺寸与约束',
+  },
+  note: {
+    title: '笔记',
+    body: '写下想法…',
+  },
+  asset: {
+    title: '素材集合',
+    body: '图片、视频、字体与可复用元素',
+  },
+  task: {
+    title: '执行任务',
+    body: '定义可运行的设计动作',
+  },
 };
 
 function stopCanvasEvent(event: SyntheticEvent) {
@@ -186,6 +219,131 @@ function ConnectionPort({
   );
 }
 
+function CardKindIcon({ kind }: { kind: Exclude<DesignCardKind, 'generate'> }) {
+  if (kind === 'brief') return <FileText size={15} />;
+  if (kind === 'note') return <StickyNote size={15} />;
+  if (kind === 'asset') return <Images size={15} />;
+  return <WandSparkles size={15} />;
+}
+
+function DomainCard({ shape }: { shape: DesignCardShape }) {
+  const editor = useEditor();
+  const { kind, title, body } = shape.props;
+  const domainKind = kind as Exclude<DesignCardKind, 'generate'>;
+  const placeholder = cardPlaceholders[domainKind];
+  const editing = useIsEditing(shape.id);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const bodyInputRef = useRef<HTMLTextAreaElement>(null);
+
+  const updateCard = (props: Partial<DesignCardProps>) => {
+    editor.updateShape<DesignCardShape>({
+      id: shape.id,
+      type: DESIGN_CARD_TYPE,
+      props,
+    });
+  };
+  useEffect(() => {
+    if (!editing) return;
+    const frame = window.requestAnimationFrame(() => {
+      (domainKind === 'note' ? bodyInputRef.current : titleInputRef.current)?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [domainKind, editing]);
+
+  const finishEditing = () => editor.setEditingShape(null);
+  const handleEditorBlur = (event: ReactFocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) finishEditing();
+  };
+  const handleEditorKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (event.key === 'Escape' || (event.key === 'Enter' && (event.metaKey || event.ctrlKey))) {
+      event.preventDefault();
+      finishEditing();
+    }
+  };
+
+  return (
+    <HTMLContainer
+      className={`dc-domain-card dc-domain-card--${domainKind}`}
+      data-kind={domainKind}
+      data-testid={`${domainKind}-card-shape`}
+      style={{ pointerEvents: 'all' }}
+    >
+      <ConnectionPort shapeId={shape.id} role="output" title={title || placeholder.title} />
+      {editing ? (
+        <div
+          className="dc-domain-card__editor"
+          onPointerDown={stopCanvasEvent}
+          onDoubleClick={stopCanvasEvent}
+          onKeyDown={handleEditorKeyDown}
+          onBlur={handleEditorBlur}
+        >
+          <div className="dc-domain-card__editor-label">
+            <CardKindIcon kind={domainKind} />
+            <span>{kindLabel[domainKind]}</span>
+          </div>
+          {domainKind !== 'note' ? (
+            <input
+              ref={titleInputRef}
+              aria-label={`${kindLabel[domainKind]}标题`}
+              value={title}
+              placeholder={placeholder.title}
+              onChange={(event) => updateCard({ title: event.target.value })}
+            />
+          ) : null}
+          <textarea
+            ref={bodyInputRef}
+            aria-label={`${kindLabel[domainKind]}内容`}
+            value={body}
+            placeholder={placeholder.body}
+            rows={domainKind === 'note' ? 6 : 4}
+            onChange={(event) => updateCard({ body: event.target.value })}
+          />
+        </div>
+      ) : (
+        <div className="dc-domain-card__surface">
+          <div className="dc-domain-card__header">
+            <span className="dc-domain-card__icon"><CardKindIcon kind={domainKind} /></span>
+            <span>{kindLabel[domainKind]}</span>
+            {domainKind === 'task' ? <span className="dc-task-card__state">READY</span> : null}
+          </div>
+
+          {domainKind === 'asset' ? (
+            <div className="dc-asset-card__preview" aria-hidden="true">
+              <span><Images size={20} /></span>
+              <span />
+              <span />
+              <span />
+            </div>
+          ) : null}
+
+          {domainKind === 'note' ? (
+            <div className="dc-note-card__copy" data-empty={!body || undefined}>
+              {body || placeholder.body}
+            </div>
+          ) : (
+            <>
+              <div className="dc-domain-card__title" data-empty={!title || undefined}>
+                {title || placeholder.title}
+              </div>
+              <div className="dc-domain-card__body" data-empty={!body || undefined}>
+                {body || placeholder.body}
+              </div>
+              {domainKind === 'brief' ? (
+                <div className="dc-brief-card__fields" aria-hidden="true">
+                  <span>目标</span>
+                  <span>受众</span>
+                  <span>约束</span>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      )}
+    </HTMLContainer>
+  );
+}
+
 function GenerationCard({ shape }: { shape: DesignCardShape }) {
   const editor = useEditor();
   const {
@@ -271,6 +429,10 @@ export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
     return true;
   }
 
+  override canEdit(shape: DesignCardShape) {
+    return shape.props.kind !== 'generate';
+  }
+
   override getDefaultProps(): DesignCardShape['props'] {
     return {
       w: 320,
@@ -287,30 +449,11 @@ export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
   }
 
   component(shape: DesignCardShape) {
-    const { kind, title, body, eyebrow } = shape.props;
+    const { kind } = shape.props;
     if (kind === 'generate') {
       return <GenerationCard shape={shape} />;
     }
-
-    return (
-      <HTMLContainer
-        className="dc-design-card"
-        data-kind={kind}
-        data-testid="design-card-shape"
-        style={{ pointerEvents: 'all' }}
-      >
-        <ConnectionPort shapeId={shape.id} role="output" title={title} />
-        <div className="dc-design-card__content">
-          <div className="dc-design-card__meta">
-            <span>{kindLabel[kind]}</span>
-            <span className="dc-design-card__status" />
-          </div>
-          {eyebrow ? <div className="dc-design-card__eyebrow">{eyebrow}</div> : null}
-          <div className="dc-design-card__title">{title}</div>
-          {body ? <div className="dc-design-card__body">{body}</div> : null}
-        </div>
-      </HTMLContainer>
-    );
+    return <DomainCard shape={shape} />;
   }
 
   indicator(shape: DesignCardShape) {

@@ -84,30 +84,57 @@ function getConnectionPreviewPath({ start, current }: ConnectionDragState) {
 
 const cardPresets: Record<DesignCardKind, Pick<DesignCardShape['props'], 'title' | 'body' | 'eyebrow'>> = {
   brief: {
-    title: '视觉任务简报',
-    eyebrow: 'PROJECT INPUT',
-    body: '品牌目标、受众、尺寸与不可违背的约束。',
+    title: '',
+    eyebrow: 'PROJECT BRIEF',
+    body: '',
   },
   note: {
-    title: '设计笔记',
-    eyebrow: 'WORKING NOTE',
-    body: '记录判断、反馈与下一步动作。',
+    title: '',
+    eyebrow: 'NOTE',
+    body: '',
   },
   asset: {
-    title: '素材集合',
+    title: '',
     eyebrow: 'LOCAL ASSETS',
-    body: '图片、字体、视频与可复用设计元素。',
+    body: '',
   },
   task: {
-    title: '执行任务',
+    title: '',
     eyebrow: 'AGENT TASK',
-    body: '可运行、可追踪、可复用的设计动作。',
+    body: '',
   },
   generate: {
     title: '图像生成',
     eyebrow: 'IMAGE DRAFT · 1:1',
     body: '描述主体、构图、光线和视觉风格。',
   },
+};
+
+const legacyCardCopy: Partial<Record<DesignCardKind, { title: string; body: string }>> = {
+  brief: {
+    title: '视觉任务简报',
+    body: '品牌目标、受众、尺寸与不可违背的约束。',
+  },
+  note: {
+    title: '设计笔记',
+    body: '记录判断、反馈与下一步动作。',
+  },
+  asset: {
+    title: '素材集合',
+    body: '图片、字体、视频与可复用设计元素。',
+  },
+  task: {
+    title: '执行任务',
+    body: '可运行、可追踪、可复用的设计动作。',
+  },
+};
+
+const cardSizes: Record<DesignCardKind, { w: number; h: number }> = {
+  brief: { w: 360, h: 220 },
+  note: { w: 270, h: 200 },
+  asset: { w: 320, h: 220 },
+  task: { w: 320, h: 188 },
+  generate: { w: 360, h: 300 },
 };
 
 function findOpenCardPosition(editor: Editor, size: { w: number; h: number }) {
@@ -153,7 +180,7 @@ function createCard(
   preferredPosition?: { x: number; y: number }
 ) {
   const id = createShapeId();
-  const size = kind === 'generate' ? { w: 360, h: 300 } : { w: 320, h: 188 };
+  const size = cardSizes[kind];
   const position = preferredPosition ?? findOpenCardPosition(editor, size);
   editor.createShape<DesignCardShape>({
     id,
@@ -197,11 +224,37 @@ function seedCanvas(editor: Editor, projectDescription?: string | null) {
       ...cardPresets[kind],
       ...(kind === 'brief' && projectDescription ? { body: projectDescription } : {}),
       kind,
-      w: 320,
-      h: 188,
+      ...cardSizes[kind],
     },
   })));
   editor.zoomToFit({ animation: { duration: 240 } });
+}
+
+function migrateLegacyCardCopy(editor: Editor) {
+  let migratedCount = 0;
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== DESIGN_CARD_TYPE) continue;
+    const card = shape as DesignCardShape;
+    if (card.props.kind === 'generate') continue;
+    const legacy = legacyCardCopy[card.props.kind];
+    if (!legacy) continue;
+    const nextSize = cardSizes[card.props.kind];
+    const props: Partial<DesignCardShape['props']> = {};
+    if (card.props.title === legacy.title) props.title = '';
+    if (card.props.body === legacy.body) props.body = '';
+    if (card.props.w === 320 && card.props.h === 188) {
+      props.w = nextSize.w;
+      props.h = nextSize.h;
+    }
+    if (Object.keys(props).length === 0) continue;
+    editor.updateShape<DesignCardShape>({
+      id: card.id,
+      type: DESIGN_CARD_TYPE,
+      props,
+    });
+    migratedCount += 1;
+  }
+  return migratedCount;
 }
 
 function removeLegacyGenerationDraft(editor: Editor) {
@@ -505,6 +558,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
     if (!canvasDocument && mountedEditor.getCurrentPageShapes().length === 0) {
       seedCanvas(mountedEditor, project?.description);
     }
+    const migratedCardCopyCount = migrateLegacyCardCopy(mountedEditor);
     const removedLegacyDraftCount = removeLegacyGenerationDraft(mountedEditor);
     const normalizedConnectionCount = normalizeDesignCardConnections(mountedEditor);
 
@@ -521,7 +575,12 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
       removeSessionListener();
     };
 
-    if (!canvasDocument || removedLegacyDraftCount > 0 || normalizedConnectionCount > 0) {
+    if (
+      !canvasDocument
+      || migratedCardCopyCount > 0
+      || removedLegacyDraftCount > 0
+      || normalizedConnectionCount > 0
+    ) {
       queueSave(mountedEditor, 0);
     }
   }, [canvasDocument, project?.description, queueSave]);
