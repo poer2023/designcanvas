@@ -1,21 +1,26 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  ArrowUp,
   Bot,
   FolderOpen,
   ImagePlus,
+  ListTodo,
   LoaderCircle,
   Network,
   PanelRightClose,
   Play,
   Plus,
+  SlidersHorizontal,
+  Sparkles,
   Upload,
 } from 'lucide-react';
 import type { Editor, TLShapeId } from 'tldraw';
 import {
   GENERATION_RATIOS,
   compileGenerationWorkflow,
+  connectDesignCards,
   getGenerationNodeInput,
   persistGenerationWorkflow,
   runGenerationWorkflow,
@@ -32,7 +37,7 @@ interface CanvasSidePanelProps {
   editor: Editor | null;
   projectId: string;
   onCreateTask: (title: string, body: string) => void;
-  onCreateGeneration: (input: GenerationCardInput) => void;
+  onCreateGeneration: (input: GenerationCardInput, afterShapeId?: TLShapeId) => TLShapeId | null;
   onImportAssets: () => Promise<number>;
   onCollapse: () => void;
 }
@@ -50,9 +55,15 @@ interface WorkflowSummary {
   selectedGenerationId: TLShapeId | null;
 }
 
-type PanelMode = 'agent' | 'assets';
+interface AgentMessage {
+  id: number;
+  role: 'user' | 'agent';
+  text: string;
+}
 
-const quickTasks = ['整理画布', '提取风格', '检查一致性', '准备导出'];
+type PanelMode = 'agent' | 'assets';
+type ComposerAction = 'generate' | 'task';
+
 const defaultGenerationInput: GenerationCardInput = {
   prompt: '',
   negativePrompt: '',
@@ -100,11 +111,15 @@ export default function CanvasSidePanel({
   onCollapse,
 }: CanvasSidePanelProps) {
   const ready = Boolean(editor);
+  const messageIdRef = useRef(0);
   const [mode, setMode] = useState<PanelMode>('agent');
-  const [taskPrompt, setTaskPrompt] = useState('');
+  const [agentPrompt, setAgentPrompt] = useState('');
+  const [composerAction, setComposerAction] = useState<ComposerAction>('generate');
+  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [generationInput, setGenerationInput] = useState(defaultGenerationInput);
   const [models, setModels] = useState<ImageModel[]>([]);
   const [workflow, setWorkflow] = useState<WorkflowSummary>(() => readWorkflowSummary(editor));
+  const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -121,11 +136,7 @@ export default function CanvasSidePanel({
   }, [editor]);
 
   useEffect(() => {
-    if (!editor) return;
-    if (!workflow.selectedGenerationId) {
-      setGenerationInput((current) => ({ ...defaultGenerationInput, modelId: current.modelId }));
-      return;
-    }
+    if (!editor || !workflow.selectedGenerationId) return;
     const selected = editor.getShape<DesignCardShape>(workflow.selectedGenerationId);
     if (selected?.type === DESIGN_CARD_TYPE && selected.props.kind === 'generate') {
       setGenerationInput(getGenerationNodeInput(selected));
@@ -138,70 +149,93 @@ export default function CanvasSidePanel({
       .then((response) => response.json())
       .then((payload: { success?: boolean; data?: ImageModel[] }) => {
         if (cancelled || !payload.success || !payload.data) return;
-        const imageModels = payload.data.filter((model) => (
+        setModels(payload.data.filter((model) => (
           model.capabilities.includes('text2img') || model.capabilities.includes('img2img')
-        ));
-        setModels(imageModels);
+        )));
       })
       .catch((error) => console.error('Failed to load image models:', error));
     return () => { cancelled = true; };
   }, []);
 
+  const appendMessage = (role: AgentMessage['role'], text: string) => {
+    messageIdRef.current += 1;
+    const id = messageIdRef.current;
+    setMessages((current) => [...current, { id, role, text }]);
+  };
+
   const patchGenerationInput = (patch: Partial<GenerationCardInput>) => {
     setGenerationInput((current) => ({ ...current, ...patch }));
   };
 
-  const addTask = (title: string, body = '') => {
-    if (!ready) return;
-    onCreateTask(title, body.trim() || '等待执行');
-    setTaskPrompt('');
-  };
+  const submitAgentPrompt = () => {
+    const prompt = agentPrompt.trim();
+    if (!editor || !prompt) return;
+    appendMessage('user', prompt);
 
-  const saveGenerationNode = () => {
-    if (!editor || !generationInput.prompt.trim()) return;
-    if (workflow.selectedGenerationId) {
-      editor.updateShape<DesignCardShape>({
-        id: workflow.selectedGenerationId,
-        type: DESIGN_CARD_TYPE,
-        props: {
-          title: '图像生成',
-          eyebrow: `GENERATION · ${generationInput.ratio}`,
-          body: generationInput.prompt.trim(),
-          prompt: generationInput.prompt.trim(),
-          negativePrompt: generationInput.negativePrompt.trim(),
-          modelId: generationInput.modelId,
-          ratio: generationInput.ratio,
-          seed: generationInput.seed,
-          steps: generationInput.steps,
-          guidance: generationInput.guidance,
-          strength: generationInput.strength,
-          status: 'draft',
-          outputUrl: '',
-          outputAssetId: '',
-          error: '',
-        },
-      });
-      setRunResult('节点参数已更新，原输出已标记为过期');
+    if (composerAction === 'task') {
+      onCreateTask(prompt.slice(0, 28), prompt);
+      appendMessage('agent', '任务卡片已添加到画布');
+      setAgentPrompt('');
       return;
     }
-    onCreateGeneration({
-      ...generationInput,
-      prompt: generationInput.prompt.trim(),
-      negativePrompt: generationInput.negativePrompt.trim(),
+
+    const sourceId = workflow.selectedGenerationId ?? undefined;
+    const nextInput = sourceId
+      ? { ...generationInput, prompt, seed: undefined }
+      : { ...defaultGenerationInput, modelId: generationInput.modelId, prompt };
+    const createdId = onCreateGeneration(nextInput, sourceId);
+    if (!createdId) {
+      appendMessage('agent', '生成节点创建失败');
+      return;
+    }
+    if (sourceId) {
+      try {
+        connectDesignCards(editor, sourceId, createdId);
+        appendMessage('agent', '下游迭代节点已创建并连接');
+      } catch (error) {
+        appendMessage('agent', error instanceof Error ? error.message : '节点已创建，但连接失败');
+      }
+    } else {
+      appendMessage('agent', '生成节点已添加到画布');
+    }
+    setAgentPrompt('');
+  };
+
+  const saveSelectedGeneration = () => {
+    if (!editor || !workflow.selectedGenerationId || !generationInput.prompt.trim()) return;
+    editor.updateShape<DesignCardShape>({
+      id: workflow.selectedGenerationId,
+      type: DESIGN_CARD_TYPE,
+      props: {
+        title: '图像生成',
+        eyebrow: `GENERATION · ${generationInput.ratio}`,
+        body: generationInput.prompt.trim(),
+        prompt: generationInput.prompt.trim(),
+        negativePrompt: generationInput.negativePrompt.trim(),
+        modelId: generationInput.modelId,
+        ratio: generationInput.ratio,
+        seed: generationInput.seed,
+        steps: generationInput.steps,
+        guidance: generationInput.guidance,
+        strength: generationInput.strength,
+        status: 'draft',
+        outputUrl: '',
+        outputAssetId: '',
+        error: '',
+      },
     });
-    setGenerationInput((current) => ({ ...defaultGenerationInput, modelId: current.modelId }));
-    setRunResult('生成节点已添加到画布');
+    setRunResult('节点设置已更新');
   };
 
   const runWorkflow = async (startNodeId?: TLShapeId) => {
     if (!editor || running) return;
     setRunning(true);
-    setRunResult(startNodeId ? '正在运行所选节点及下游节点…' : '正在按连接顺序运行工作流…');
+    setRunResult(startNodeId ? '正在运行所选节点及下游…' : '正在运行全部节点…');
     try {
       const graph = await persistGenerationWorkflow(projectId, editor);
       const report = await runGenerationWorkflow(editor, startNodeId, graph);
       await persistGenerationWorkflow(projectId, editor);
-      setRunResult(`已完成 ${report.completedNodeIds.length} 个节点，经过 ${report.edgeCount} 条连接`);
+      setRunResult(`已完成 ${report.completedNodeIds.length} 个节点`);
     } catch (error) {
       setRunResult(error instanceof Error ? error.message : '工作流运行失败');
     } finally {
@@ -239,101 +273,115 @@ export default function CanvasSidePanel({
       </div>
 
       {mode === 'agent' ? (
-        <div className="dc-panel-content">
-          <div className="dc-panel-heading dc-panel-heading--workflow">
-            <div>
-              <span>CONNECTED WORKFLOW</span>
-              <h2>节点工作流</h2>
+        <div className="dc-agent-content">
+          <div className="dc-agent-header">
+            <div className="dc-agent-identity">
+              <span><Bot size={16} /></span>
+              <div><strong>Design Agent</strong><small>{workflow.nodes} 节点 · {workflow.edges} 连接</small></div>
             </div>
-            <Network size={20} />
-          </div>
-
-          <div className="dc-workflow-summary" data-error={workflow.error ? true : undefined}>
-            <div><strong>{workflow.nodes}</strong><span>生成节点</span></div>
-            <div><strong>{workflow.edges}</strong><span>有效连接</span></div>
-          </div>
-          {workflow.error ? <div className="dc-workflow-message" data-error>{workflow.error}</div> : null}
-
-          <div className="dc-workflow-actions">
-            <button type="button" className="dc-primary-action" disabled={!ready || running || workflow.nodes === 0 || Boolean(workflow.error)} onClick={() => void runWorkflow()}>
-              {running ? <LoaderCircle className="dc-spin" size={16} /> : <Play size={16} />}
-              运行全部
-            </button>
-            <button type="button" className="dc-secondary-action" disabled={!ready || running || !workflow.selectedGenerationId || Boolean(workflow.error)} onClick={() => void runWorkflow(workflow.selectedGenerationId ?? undefined)}>
-              从所选节点运行
-            </button>
-          </div>
-          {runResult ? <div className="dc-workflow-message">{runResult}</div> : null}
-
-          <div className="dc-panel-section-title">
-            <span>{workflow.selectedGenerationId ? '所选节点' : '新节点'}</span>
-            <strong>{workflow.selectedGenerationId ? '编辑生成参数' : '添加生成节点'}</strong>
-          </div>
-
-          <label className="dc-field-label" htmlFor="generation-prompt">提示词</label>
-          <textarea
-            id="generation-prompt"
-            className="dc-panel-textarea"
-            value={generationInput.prompt}
-            onChange={(event) => patchGenerationInput({ prompt: event.target.value })}
-            placeholder="描述主体、构图、光线和视觉风格"
-            rows={5}
-          />
-
-          <label className="dc-field-label" htmlFor="generation-negative">反向提示词</label>
-          <textarea
-            id="generation-negative"
-            className="dc-panel-textarea dc-panel-textarea--compact"
-            value={generationInput.negativePrompt}
-            onChange={(event) => patchGenerationInput({ negativePrompt: event.target.value })}
-            placeholder="排除不希望出现的内容"
-            rows={2}
-          />
-
-          <label className="dc-field-label" htmlFor="generation-model">模型</label>
-          <select
-            id="generation-model"
-            className="dc-panel-select"
-            value={generationInput.modelId}
-            onChange={(event) => patchGenerationInput({ modelId: event.target.value })}
-          >
-            {models.length === 0 ? <option value="mock:default">Mock Generator</option> : null}
-            {models.map((model) => <option key={model.model_id} value={model.model_id}>{model.display_name}</option>)}
-          </select>
-
-          <span className="dc-field-label">画幅</span>
-          <div className="dc-ratio-control" role="group" aria-label="画幅比例">
-            {GENERATION_RATIOS.map((ratio) => (
-              <button key={ratio} type="button" data-active={generationInput.ratio === ratio || undefined} onClick={() => patchGenerationInput({ ratio })}>
-                {ratio}
+            <div className="dc-agent-run-actions">
+              <button type="button" aria-label="从所选节点运行" title="从所选节点运行" disabled={!workflow.selectedGenerationId || running || Boolean(workflow.error)} onClick={() => void runWorkflow(workflow.selectedGenerationId ?? undefined)}>
+                <Network size={15} />
               </button>
-            ))}
-          </div>
-
-          <div className="dc-number-grid">
-            <label>Seed<input type="number" min="0" max="2147483647" value={generationInput.seed ?? ''} placeholder="自动" onChange={(event) => patchGenerationInput({ seed: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
-            <label>Steps<input type="number" min="1" max="150" value={generationInput.steps} onChange={(event) => patchGenerationInput({ steps: Number(event.target.value) })} /></label>
-            <label>Guidance<input type="number" min="1" max="30" step="0.5" value={generationInput.guidance} onChange={(event) => patchGenerationInput({ guidance: Number(event.target.value) })} /></label>
-            <label>变化强度<input type="number" min="0.05" max="1" step="0.05" value={generationInput.strength} onChange={(event) => patchGenerationInput({ strength: Number(event.target.value) })} /></label>
-          </div>
-
-          <button type="button" className="dc-primary-action dc-node-save" disabled={!ready || !generationInput.prompt.trim()} onClick={saveGenerationNode}>
-            {workflow.selectedGenerationId ? <Network size={16} /> : <ImagePlus size={16} />}
-            {workflow.selectedGenerationId ? '更新所选节点' : '添加到画布'}
-          </button>
-
-          <details className="dc-agent-tasks">
-            <summary>添加普通 Agent 任务</summary>
-            <div className="dc-task-grid">
-              {quickTasks.map((task) => (
-                <button key={task} type="button" className="dc-task-chip" disabled={!ready} onClick={() => addTask(task)}>{task}</button>
-              ))}
+              <button type="button" aria-label="运行全部节点" title="运行全部节点" disabled={workflow.nodes === 0 || running || Boolean(workflow.error)} onClick={() => void runWorkflow()}>
+                {running ? <LoaderCircle className="dc-spin" size={15} /> : <Play size={15} />}
+              </button>
             </div>
-            <textarea className="dc-panel-textarea dc-panel-textarea--compact" value={taskPrompt} onChange={(event) => setTaskPrompt(event.target.value)} placeholder="输入要执行的设计任务" rows={3} />
-            <button type="button" className="dc-secondary-action" disabled={!ready || !taskPrompt.trim()} onClick={() => addTask(taskPrompt.trim(), taskPrompt)}>
-              <Plus size={15} /> 添加任务卡片
-            </button>
-          </details>
+          </div>
+
+          {workflow.error ? <div className="dc-agent-notice" data-error>{workflow.error}</div> : null}
+
+          <div className="dc-agent-thread" aria-live="polite">
+            {messages.length === 0 && !runResult ? (
+              <div className="dc-agent-empty">
+                <Sparkles size={18} />
+                <span>画布已就绪</span>
+              </div>
+            ) : null}
+            {messages.map((message) => (
+              <div key={message.id} className="dc-agent-message" data-role={message.role}>
+                {message.text}
+              </div>
+            ))}
+            {runResult ? <div className="dc-agent-message" data-role="agent">{runResult}</div> : null}
+          </div>
+
+          {workflow.selectedGenerationId ? (
+            <details className="dc-node-inspector">
+              <summary>
+                <SlidersHorizontal size={15} />
+                <span>节点设置</span>
+                <small>{generationInput.modelId} · {generationInput.ratio}</small>
+              </summary>
+              <div className="dc-node-inspector__body">
+                <label className="dc-field-label" htmlFor="selected-generation-prompt">提示词</label>
+                <textarea id="selected-generation-prompt" className="dc-panel-textarea" value={generationInput.prompt} onChange={(event) => patchGenerationInput({ prompt: event.target.value })} rows={3} />
+
+                <label className="dc-field-label" htmlFor="selected-generation-negative">反向提示词</label>
+                <textarea id="selected-generation-negative" className="dc-panel-textarea dc-panel-textarea--compact" value={generationInput.negativePrompt} onChange={(event) => patchGenerationInput({ negativePrompt: event.target.value })} rows={2} />
+
+                <label className="dc-field-label" htmlFor="selected-generation-model">模型</label>
+                <select id="selected-generation-model" className="dc-panel-select" value={generationInput.modelId} onChange={(event) => patchGenerationInput({ modelId: event.target.value })}>
+                  {models.length === 0 ? <option value="mock:default">Mock Generator</option> : null}
+                  {models.map((model) => <option key={model.model_id} value={model.model_id}>{model.display_name}</option>)}
+                </select>
+
+                <div className="dc-ratio-control" role="group" aria-label="画幅比例">
+                  {GENERATION_RATIOS.map((ratio) => (
+                    <button key={ratio} type="button" data-active={generationInput.ratio === ratio || undefined} onClick={() => patchGenerationInput({ ratio })}>{ratio}</button>
+                  ))}
+                </div>
+
+                <div className="dc-number-grid">
+                  <label>Seed<input type="number" min="0" max="2147483647" value={generationInput.seed ?? ''} placeholder="自动" onChange={(event) => patchGenerationInput({ seed: event.target.value === '' ? undefined : Number(event.target.value) })} /></label>
+                  <label>Steps<input type="number" min="1" max="150" value={generationInput.steps} onChange={(event) => patchGenerationInput({ steps: Number(event.target.value) })} /></label>
+                  <label>Guidance<input type="number" min="1" max="30" step="0.5" value={generationInput.guidance} onChange={(event) => patchGenerationInput({ guidance: Number(event.target.value) })} /></label>
+                  <label>变化强度<input type="number" min="0.05" max="1" step="0.05" value={generationInput.strength} onChange={(event) => patchGenerationInput({ strength: Number(event.target.value) })} /></label>
+                </div>
+
+                <button type="button" className="dc-secondary-action" disabled={!generationInput.prompt.trim()} onClick={saveSelectedGeneration}>保存节点设置</button>
+              </div>
+            </details>
+          ) : null}
+
+          <div className="dc-agent-composer">
+            <textarea
+              aria-label="Agent 输入"
+              value={agentPrompt}
+              onChange={(event) => setAgentPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  submitAgentPrompt();
+                }
+              }}
+              placeholder={workflow.selectedGenerationId ? '描述下一步迭代…' : '让 Agent 在画布上完成什么？'}
+              rows={3}
+            />
+            <div className="dc-agent-composer__footer">
+              <div className="dc-composer-menu-wrap">
+                <button type="button" className="dc-composer-icon" aria-label="选择卡片类型" title="选择卡片类型" onClick={() => setComposerMenuOpen((open) => !open)}>
+                  <Plus size={17} />
+                </button>
+                {composerMenuOpen ? (
+                  <div className="dc-composer-menu" role="menu">
+                    <button type="button" role="menuitem" data-active={composerAction === 'generate' || undefined} onClick={() => { setComposerAction('generate'); setComposerMenuOpen(false); }}>
+                      <ImagePlus size={15} /> 生成节点
+                    </button>
+                    <button type="button" role="menuitem" data-active={composerAction === 'task' || undefined} onClick={() => { setComposerAction('task'); setComposerMenuOpen(false); }}>
+                      <ListTodo size={15} /> 任务卡片
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              <span className="dc-composer-target">
+                {composerAction === 'task' ? '任务卡片' : workflow.selectedGenerationId ? '基于所选节点' : '生成节点'}
+              </span>
+              <button type="button" className="dc-composer-send" aria-label="发送给 Agent" title="发送给 Agent" disabled={!ready || !agentPrompt.trim()} onClick={submitAgentPrompt}>
+                <ArrowUp size={17} />
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 

@@ -60,8 +60,9 @@ Implemented:
 - custom brief, note, asset, task, and generation shapes
 - custom Lovart-like desktop shell and bottom toolbar
 - collapsible Agent and Assets side-panel modes inside the canvas
-- generation-node parameter editor inside Agent
-- explicit arrow bindings compiled and persisted as a directed execution graph
+- Lovart-style Agent composer with selected-node downstream iteration
+- collapsed contextual generation settings inside Agent
+- visible card ports and explicit arrow bindings compiled and persisted as a directed execution graph
 - cycle validation, run-all, and run-from-selected generation iteration
 - pan, zoom, select, draw, text, frame, undo, and redo controls
 - document plus session/camera persistence

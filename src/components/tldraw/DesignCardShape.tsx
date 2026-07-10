@@ -8,7 +8,9 @@ import {
 import { ImageIcon, Sparkles } from 'lucide-react';
 
 export const DESIGN_CARD_TYPE = 'design-card' as const;
+export const DESIGN_CARD_PORT_EVENT = 'designcanvas:card-port';
 export type DesignCardKind = 'brief' | 'note' | 'asset' | 'task' | 'generate';
+export type DesignCardPortRole = 'input' | 'output';
 
 export interface DesignCardProps {
   w: number;
@@ -55,6 +57,40 @@ const generationStatusLabel: Record<NonNullable<DesignCardProps['status']>, stri
   done: '完成',
   error: '失败',
 };
+
+function ConnectionPort({
+  shapeId,
+  role,
+  title,
+}: {
+  shapeId: DesignCardShape['id'];
+  role: DesignCardPortRole;
+  title: string;
+}) {
+  const label = role === 'output' ? `从“${title}”连接` : `连接到“${title}”`;
+  return (
+    <button
+      type="button"
+      className={`dc-card-port dc-card-port--${role}`}
+      data-connection-port={role}
+      aria-label={label}
+      title={label}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        window.dispatchEvent(new CustomEvent(DESIGN_CARD_PORT_EVENT, {
+          detail: { shapeId, role },
+        }));
+      }}
+    >
+      <span />
+    </button>
+  );
+}
 
 export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
   static override type = DESIGN_CARD_TYPE;
@@ -108,6 +144,8 @@ export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
           data-testid="generation-card-shape"
           style={{ pointerEvents: 'all' }}
         >
+          <ConnectionPort shapeId={shape.id} role="input" title={title} />
+          <ConnectionPort shapeId={shape.id} role="output" title={title} />
           <div
             className="dc-generation-card__preview"
             data-status={status}
@@ -135,7 +173,7 @@ export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
         data-testid="design-card-shape"
         style={{ pointerEvents: 'all' }}
       >
-        <div className="dc-design-card__rail" />
+        <ConnectionPort shapeId={shape.id} role="output" title={title} />
         <div className="dc-design-card__content">
           <div className="dc-design-card__meta">
             <span>{kindLabel[kind]}</span>

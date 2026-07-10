@@ -1,4 +1,10 @@
-import type { Editor, TLArrowBinding, TLShapeId } from 'tldraw';
+import {
+  createShapeId,
+  type Editor,
+  type TLArrowBinding,
+  type TLArrowShape,
+  type TLShapeId,
+} from 'tldraw';
 import { getDesktopBridge } from '@/lib/desktop/bridge';
 import {
   DESIGN_CARD_TYPE,
@@ -165,6 +171,80 @@ export function compileGenerationWorkflow(editor: Editor): GenerationWorkflowGra
   }
 
   return { generationNodes, allCards, edges, order };
+}
+
+export function connectDesignCards(
+  editor: Editor,
+  sourceId: TLShapeId,
+  targetId: TLShapeId
+) {
+  if (sourceId === targetId) throw new Error('节点不能连接到自身。');
+  const source = editor.getShape<DesignCardShape>(sourceId);
+  const target = editor.getShape<DesignCardShape>(targetId);
+  if (!source || source.type !== DESIGN_CARD_TYPE) throw new Error('连接起点不是有效卡片。');
+  if (!target || target.type !== DESIGN_CARD_TYPE || target.props.kind !== 'generate') {
+    throw new Error('连接目标必须是生成节点。');
+  }
+
+  for (const shape of editor.getCurrentPageShapes()) {
+    if (shape.type !== 'arrow') continue;
+    const bindings = editor.getBindingsFromShape<TLArrowBinding>(shape, 'arrow');
+    const start = bindings.find((binding) => binding.props.terminal === 'start');
+    const end = bindings.find((binding) => binding.props.terminal === 'end');
+    if (start?.toId === sourceId && end?.toId === targetId) return shape.id;
+  }
+
+  const sourceBounds = editor.getShapePageBounds(source);
+  const targetBounds = editor.getShapePageBounds(target);
+  if (!sourceBounds || !targetBounds) throw new Error('无法读取卡片位置。');
+  const start = sourceBounds.center;
+  const end = targetBounds.center;
+  const targetIsRight = end.x >= start.x;
+  const arrowId = createShapeId();
+
+  editor.markHistoryStoppingPoint('connect design cards');
+  editor.createShape<TLArrowShape>({
+    id: arrowId,
+    type: 'arrow',
+    x: start.x,
+    y: start.y,
+    props: {
+      start: { x: 0, y: 0 },
+      end: { x: end.x - start.x, y: end.y - start.y },
+      bend: 0,
+      size: 's',
+      dash: 'solid',
+      color: 'black',
+      arrowheadEnd: 'arrow',
+    },
+  });
+  editor.createBindings([
+    {
+      type: 'arrow',
+      fromId: arrowId,
+      toId: sourceId,
+      props: {
+        terminal: 'start',
+        normalizedAnchor: { x: targetIsRight ? 1 : 0, y: 0.5 },
+        isExact: false,
+        isPrecise: false,
+      },
+    },
+    {
+      type: 'arrow',
+      fromId: arrowId,
+      toId: targetId,
+      props: {
+        terminal: 'end',
+        normalizedAnchor: { x: targetIsRight ? 0 : 1, y: 0.5 },
+        isExact: false,
+        isPrecise: false,
+      },
+    },
+  ]);
+  editor.select(targetId);
+  editor.setCurrentTool('select');
+  return arrowId;
 }
 
 export function serializeGenerationWorkflow(

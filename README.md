@@ -30,8 +30,11 @@ The main freeform canvas uses the same core canvas SDK family observed in Lovart
 - `/projects/[id]/canvas` tldraw workspace
 - custom design cards for briefs, notes, assets, agent tasks, and generation drafts
 - collapsible canvas side panel with only Agent and Assets modes
-- generation-node editor inside Agent with model, ratio, seed, steps, guidance, and iteration-strength controls
-- tldraw arrow bindings compiled into a directed generation graph with cycle validation
+- Lovart-style Agent composer as the primary right-panel interaction
+- selected-node prompts create a downstream iteration card and connect it automatically
+- generation parameters are available only in a collapsed contextual inspector
+- visible card input/output ports create tldraw arrow bindings without requiring toolbar discovery
+- tldraw arrow bindings compile into a directed generation graph with cycle validation
 - run-all and run-from-selected execution with text context, image references, and seed propagation
 - execution graph snapshot persisted to `project_graphs` before each run
 - generated result previews and editable downstream iteration nodes

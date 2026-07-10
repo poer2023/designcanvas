@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowLeft,
+  Cable,
   Check,
   ClipboardList,
   Frame,
@@ -22,6 +23,7 @@ import {
   Type,
   Undo2,
   WandSparkles,
+  X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -31,13 +33,17 @@ import {
   getSnapshot,
   type Editor,
   type TLEditorSnapshot,
+  type TLShapeId,
 } from 'tldraw';
+import { connectDesignCards } from '@/lib/canvas/generationWorkflow';
 import { getDesktopBridge } from '@/lib/desktop/bridge';
 import type { DesktopCanvasDocument, DesktopProject } from '@/lib/desktop/types';
 import {
   DESIGN_CARD_TYPE,
+  DESIGN_CARD_PORT_EVENT,
   designCardShapeUtils,
   type DesignCardKind,
+  type DesignCardPortRole,
   type DesignCardShape,
 } from './DesignCardShape';
 import CanvasSidePanel, { type GenerationCardInput } from './CanvasSidePanel';
@@ -115,11 +121,12 @@ function createCard(
   editor: Editor,
   kind: DesignCardKind,
   offset = { x: 0, y: 0 },
-  overrides?: Partial<DesignCardShape['props']>
+  overrides?: Partial<DesignCardShape['props']>,
+  preferredPosition?: { x: number; y: number }
 ) {
   const id = createShapeId();
   const size = kind === 'generate' ? { w: 360, h: 300 } : { w: 320, h: 188 };
-  const position = findOpenCardPosition(editor, size);
+  const position = preferredPosition ?? findOpenCardPosition(editor, size);
   editor.createShape<DesignCardShape>({
     id,
     type: DESIGN_CARD_TYPE,
@@ -143,6 +150,7 @@ function createCard(
   ) {
     editor.zoomToSelection({ animation: { duration: 180 } });
   }
+  return id;
 }
 
 function seedCanvas(editor: Editor, projectDescription?: string | null) {
@@ -340,6 +348,8 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
   const [loading, setLoading] = useState(true);
   const [editor, setEditor] = useState<Editor | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [pendingConnectionSourceId, setPendingConnectionSourceId] = useState<TLShapeId | null>(null);
+  const [connectionMessage, setConnectionMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const versionRef = useRef(0);
   const dirtyRef = useRef(false);
@@ -467,9 +477,10 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
     });
   }, [editor]);
 
-  const createGenerationCard = useCallback((input: GenerationCardInput) => {
-    if (!editor) return;
-    createCard(editor, 'generate', { x: 0, y: 0 }, {
+  const createGenerationCard = useCallback((input: GenerationCardInput, afterShapeId?: TLShapeId) => {
+    if (!editor) return null;
+    const sourceBounds = afterShapeId ? editor.getShapePageBounds(afterShapeId) : undefined;
+    return createCard(editor, 'generate', { x: 0, y: 0 }, {
       title: '图像生成',
       eyebrow: `GENERATION · ${input.ratio}`,
       body: input.prompt,
@@ -482,7 +493,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
       guidance: input.guidance,
       strength: input.strength,
       status: 'draft',
-    });
+    }, sourceBounds ? { x: sourceBounds.maxX + 120, y: sourceBounds.minY } : undefined);
   }, [editor]);
 
   const importAssets = useCallback(async () => {
@@ -514,6 +525,46 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
     if (editor && dirtyRef.current) void flushRef.current?.(editor);
   }, [editor]);
 
+  useEffect(() => {
+    if (!editor) return;
+    const handlePort = (event: Event) => {
+      const detail = (event as CustomEvent<{ shapeId: TLShapeId; role: DesignCardPortRole }>).detail;
+      if (!detail?.shapeId || !detail.role) return;
+      if (detail.role === 'output') {
+        editor.setCurrentTool('select');
+        setPendingConnectionSourceId(detail.shapeId);
+        setConnectionMessage(null);
+        return;
+      }
+      if (!pendingConnectionSourceId) {
+        setConnectionMessage({ text: '请先选择一个右侧输出端口', error: true });
+        return;
+      }
+      try {
+        connectDesignCards(editor, pendingConnectionSourceId, detail.shapeId);
+        setPendingConnectionSourceId(null);
+        setConnectionMessage({ text: '连接已创建' });
+        window.setTimeout(() => setConnectionMessage(null), 1400);
+      } catch (error) {
+        setConnectionMessage({
+          text: error instanceof Error ? error.message : '创建连接失败',
+          error: true,
+        });
+      }
+    };
+    const cancelConnection = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setPendingConnectionSourceId(null);
+      setConnectionMessage(null);
+    };
+    window.addEventListener(DESIGN_CARD_PORT_EVENT, handlePort);
+    window.addEventListener('keydown', cancelConnection);
+    return () => {
+      window.removeEventListener(DESIGN_CARD_PORT_EVENT, handlePort);
+      window.removeEventListener('keydown', cancelConnection);
+    };
+  }, [editor, pendingConnectionSourceId]);
+
   if (loading || !project) {
     return (
       <div className="dc-loading-screen">
@@ -523,7 +574,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
   }
 
   return (
-    <div className="dc-workspace">
+    <div className="dc-workspace" data-connecting={pendingConnectionSourceId ? true : undefined}>
       <header className="dc-topbar">
         <div className="dc-topbar-left">
           <button type="button" className="dc-topbar-icon" onClick={() => router.push('/')} aria-label="返回项目" title="返回项目">
@@ -557,6 +608,17 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
             options={tldrawOptions}
           />
           {editor ? <CanvasControls editor={editor} /> : null}
+          {pendingConnectionSourceId || connectionMessage ? (
+            <div className="dc-connection-message" data-error={connectionMessage?.error || undefined}>
+              <Cable size={15} />
+              <span>{connectionMessage?.text || '选择目标节点的左侧输入端口'}</span>
+              {pendingConnectionSourceId ? (
+                <button type="button" aria-label="取消连接" title="取消连接" onClick={() => setPendingConnectionSourceId(null)}>
+                  <X size={14} />
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </main>
         {panelOpen ? (
           <CanvasSidePanel
