@@ -59,7 +59,10 @@ Implemented:
 - tldraw 4.5.8 route at `/projects/[id]/canvas`
 - custom brief, note, asset, task, and generation shapes
 - custom Lovart-like desktop shell and bottom toolbar
-- Agent, Generate, and Assets side-panel modes inside the canvas
+- collapsible Agent and Assets side-panel modes inside the canvas
+- generation-node parameter editor inside Agent
+- explicit arrow bindings compiled and persisted as a directed execution graph
+- cycle validation, run-all, and run-from-selected generation iteration
 - pan, zoom, select, draw, text, frame, undo, and redo controls
 - document plus session/camera persistence
 - optimistic version conflict detection
@@ -67,9 +70,9 @@ Implemented:
 
 Next:
 
-1. Editable domain cards and inspector.
+1. Editable non-generation domain cards and richer inspectors.
 2. Real asset records and image/video shapes.
-3. Explicit workflow bindings compiled into the execution graph.
+3. Typed connection ports beyond the current card-to-generation binding rules.
 4. Result comparison, version stacks, and provenance.
 5. Agent task lifecycle and streamed activity.
 6. Export, backup, and project bundle format.

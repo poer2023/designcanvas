@@ -29,7 +29,12 @@ The main freeform canvas uses the same core canvas SDK family observed in Lovart
 - separate `canvas_documents` and `project_graphs` persistence
 - `/projects/[id]/canvas` tldraw workspace
 - custom design cards for briefs, notes, assets, agent tasks, and generation drafts
-- canvas-local Agent, Generate, and Assets modes
+- collapsible canvas side panel with only Agent and Assets modes
+- generation-node editor inside Agent with model, ratio, seed, steps, guidance, and iteration-strength controls
+- tldraw arrow bindings compiled into a directed generation graph with cycle validation
+- run-all and run-from-selected execution with text context, image references, and seed propagation
+- execution graph snapshot persisted to `project_graphs` before each run
+- generated result previews and editable downstream iteration nodes
 - debounced document and camera autosave with optimistic version checks
 - hard redirects from former project and feature routes into the new workspace
 - Next.js 16.2.10 and React 19.2.7 security baseline

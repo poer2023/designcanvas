@@ -23,7 +23,8 @@ Electron preload
 React renderer
   project library
   tldraw freeform canvas
-  agent / generation / asset modes
+  collapsible agent / asset modes
+  generation-node editor inside agent
   archived editors excluded from navigation
 ```
 
@@ -57,7 +58,7 @@ Zustand
   transient UI state only
 ```
 
-Canvas shapes must reference heavy assets by ID. The execution graph may be compiled from explicit canvas bindings later, but freeform visual position is never an execution dependency.
+Canvas shapes must reference heavy assets by ID. Explicit tldraw arrow bindings are compiled into `project_graphs` before each run; freeform visual position is never an execution dependency. Generation-to-generation edges pass output asset references, image URLs, and seeds into downstream `img2img` parameters.
 
 ## Native Database
 

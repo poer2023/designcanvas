@@ -38,7 +38,7 @@ Machine law:
 - Trigger: storing or loading canvas state.
 - Required action: write tldraw state to `canvas_documents`; write DAG state to `project_graphs`.
 - Evidence: either model can load when the other is empty.
-- Exception: an explicit compiler may derive an execution graph from canvas bindings, but the derived graph remains a separate artifact.
+- Exception: an explicit compiler may derive an execution graph from canvas bindings, but the derived graph must be persisted to `project_graphs` before execution.
 
 ### Local capabilities belong to Electron main
 
@@ -86,6 +86,8 @@ Machine law:
 - Electron can own project, execution graph, and tldraw document persistence.
 - A project opens in a real tldraw canvas with custom domain shapes.
 - Generation drafts can be added, saved, and restored without a provider connection.
+- Generation cards can be connected with arrows, compiled into an acyclic execution graph, and run from all nodes or a selected node.
+- Downstream generation receives upstream image references and seed values without embedding image binaries in shape props.
 - Pan, zoom, selection, resize, draw, text, frame, undo, and redo work.
 - Canvas content and camera state survive reload.
 - The packaged build contains and starts its own Next standalone renderer.

@@ -17,6 +17,19 @@ export interface DesignCardProps {
   title: string;
   body: string;
   eyebrow: string;
+  prompt?: string;
+  negativePrompt?: string;
+  modelId?: string;
+  ratio?: string;
+  seed?: number;
+  steps?: number;
+  guidance?: number;
+  strength?: number;
+  status?: 'draft' | 'queued' | 'running' | 'done' | 'error';
+  outputUrl?: string;
+  outputAssetId?: string;
+  outputSeed?: number;
+  error?: string;
 }
 
 declare module '@tldraw/tlschema' {
@@ -35,6 +48,14 @@ const kindLabel: Record<DesignCardKind, string> = {
   generate: 'GENERATE',
 };
 
+const generationStatusLabel: Record<NonNullable<DesignCardProps['status']>, string> = {
+  draft: '草稿',
+  queued: '排队中',
+  running: '生成中',
+  done: '完成',
+  error: '失败',
+};
+
 export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
   static override type = DESIGN_CARD_TYPE;
   static override props: RecordProps<DesignCardShape> = {
@@ -44,6 +65,19 @@ export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
     title: T.string,
     body: T.string,
     eyebrow: T.string,
+    prompt: T.optional(T.string),
+    negativePrompt: T.optional(T.string),
+    modelId: T.optional(T.string),
+    ratio: T.optional(T.string),
+    seed: T.optional(T.number),
+    steps: T.optional(T.number),
+    guidance: T.optional(T.number),
+    strength: T.optional(T.number),
+    status: T.optional(T.literalEnum('draft', 'queued', 'running', 'done', 'error')),
+    outputUrl: T.optional(T.string),
+    outputAssetId: T.optional(T.string),
+    outputSeed: T.optional(T.number),
+    error: T.optional(T.string),
   };
 
   override canResize() {
@@ -66,7 +100,7 @@ export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
   }
 
   component(shape: DesignCardShape) {
-    const { kind, title, body, eyebrow } = shape.props;
+    const { kind, title, body, eyebrow, outputUrl, status = 'draft', error } = shape.props;
     if (kind === 'generate') {
       return (
         <HTMLContainer
@@ -74,17 +108,21 @@ export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
           data-testid="generation-card-shape"
           style={{ pointerEvents: 'all' }}
         >
-          <div className="dc-generation-card__preview">
-            <div className="dc-generation-card__symbol"><ImageIcon size={24} /></div>
+          <div
+            className="dc-generation-card__preview"
+            data-status={status}
+            style={outputUrl ? { backgroundImage: `url(${JSON.stringify(outputUrl)})` } : undefined}
+          >
+            {!outputUrl ? <div className="dc-generation-card__symbol"><ImageIcon size={24} /></div> : null}
             <span><Sparkles size={12} /> GENERATION DRAFT</span>
           </div>
           <div className="dc-generation-card__content">
             <div className="dc-generation-card__meta">
               <span>{eyebrow}</span>
-              <span className="dc-generation-card__state">草稿</span>
+              <span className="dc-generation-card__state" data-status={status}>{generationStatusLabel[status]}</span>
             </div>
             <div className="dc-generation-card__title">{title}</div>
-            <div className="dc-generation-card__prompt">{body}</div>
+            <div className="dc-generation-card__prompt">{status === 'error' && error ? error : body}</div>
           </div>
         </HTMLContainer>
       );

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
+  ArrowRight,
   ArrowLeft,
   Check,
   ClipboardList,
@@ -14,6 +15,7 @@ import {
   LoaderCircle,
   Maximize2,
   MousePointer2,
+  PanelRightOpen,
   PenLine,
   Redo2,
   StickyNote,
@@ -113,7 +115,7 @@ function createCard(
   editor: Editor,
   kind: DesignCardKind,
   offset = { x: 0, y: 0 },
-  overrides?: Partial<Pick<DesignCardShape['props'], 'title' | 'body' | 'eyebrow'>>
+  overrides?: Partial<DesignCardShape['props']>
 ) {
   const id = createShapeId();
   const size = kind === 'generate' ? { w: 360, h: 300 } : { w: 320, h: 188 };
@@ -159,7 +161,16 @@ function seedCanvas(editor: Editor, projectDescription?: string | null) {
     props: {
       ...cardPresets[kind],
       ...(kind === 'brief' && projectDescription ? { body: projectDescription } : {}),
-      ...(kind === 'generate' && projectDescription ? { body: projectDescription } : {}),
+      ...(kind === 'generate' ? {
+        body: projectDescription || cardPresets.generate.body,
+        prompt: projectDescription || cardPresets.generate.body,
+        modelId: 'mock:default',
+        ratio: '1:1',
+        steps: 28,
+        guidance: 7,
+        strength: 0.65,
+        status: 'draft' as const,
+      } : {}),
       kind,
       w: kind === 'generate' ? 360 : 320,
       h: kind === 'generate' ? 300 : 188,
@@ -272,6 +283,9 @@ function CanvasControls({ editor }: { editor: Editor }) {
         <ToolButton label="画框" active={tool === 'frame'} onClick={() => setCurrentTool('frame')}>
           <Frame size={18} />
         </ToolButton>
+        <ToolButton label="连接节点" active={tool === 'arrow'} onClick={() => setCurrentTool('arrow')}>
+          <ArrowRight size={18} />
+        </ToolButton>
       </div>
 
       <div className="dc-zoom-controls">
@@ -325,6 +339,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
   const [canvasDocument, setCanvasDocument] = useState<DesktopCanvasDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [panelOpen, setPanelOpen] = useState(true);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const versionRef = useRef(0);
   const dirtyRef = useRef(false);
@@ -454,11 +469,19 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
 
   const createGenerationCard = useCallback((input: GenerationCardInput) => {
     if (!editor) return;
-    const presetLabel = input.preset === 'poster-draft' ? 'POSTER DRAFT' : 'IMAGE DRAFT';
     createCard(editor, 'generate', { x: 0, y: 0 }, {
-      title: input.preset === 'poster-draft' ? '海报生成' : '图像生成',
-      eyebrow: `${presetLabel} · ${input.ratio}`,
+      title: '图像生成',
+      eyebrow: `GENERATION · ${input.ratio}`,
       body: input.prompt,
+      prompt: input.prompt,
+      negativePrompt: input.negativePrompt,
+      modelId: input.modelId,
+      ratio: input.ratio,
+      ...(input.seed !== undefined ? { seed: input.seed } : {}),
+      steps: input.steps,
+      guidance: input.guidance,
+      strength: input.strength,
+      status: 'draft',
     });
   }, [editor]);
 
@@ -515,6 +538,11 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
             status={saveStatus}
             onForceSave={() => editor && void flushSave(editor, true)}
           />
+          {!panelOpen ? (
+            <button type="button" className="dc-topbar-icon" onClick={() => setPanelOpen(true)} aria-label="展开右侧栏" title="展开右侧栏">
+              <PanelRightOpen size={17} />
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -530,12 +558,16 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
           />
           {editor ? <CanvasControls editor={editor} /> : null}
         </main>
-        <CanvasSidePanel
-          ready={Boolean(editor)}
-          onCreateTask={createTaskCard}
-          onCreateGeneration={createGenerationCard}
-          onImportAssets={importAssets}
-        />
+        {panelOpen ? (
+          <CanvasSidePanel
+            editor={editor}
+            projectId={projectId}
+            onCreateTask={createTaskCard}
+            onCreateGeneration={createGenerationCard}
+            onImportAssets={importAssets}
+            onCollapse={() => setPanelOpen(false)}
+          />
+        ) : null}
       </div>
     </div>
   );
