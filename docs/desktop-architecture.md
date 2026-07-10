@@ -70,13 +70,13 @@ The global generation entry is a single-row composer floating above the bottom c
 
 Development explicitly uses `<appData>/DesignCanvas`; packaged builds use Electron's product-scoped default. `DESIGNCANVAS_USER_DATA_DIR` may override the location for isolated smoke tests. Do not point it at the repository database.
 
-`better-sqlite3` must be rebuilt for Electron's ABI with:
+`better-sqlite3` can be rebuilt for Electron's ABI explicitly with:
 
 ```bash
 pnpm run desktop:rebuild
 ```
 
-After rebuilding, desktop renderer development and desktop tests run through `desktop/scripts/electron-node.cjs`. This keeps Electron main, the compatibility Next server, and SQLite on the same native ABI. Plain `pnpm dev` is the browser-preview path and expects the normal Node build produced by `pnpm install` or `pnpm rebuild better-sqlite3`.
+The Web server, desktop renderer, and desktop tests run through `desktop/scripts/run-with-native-runtime.cjs`. It probes `better-sqlite3` with the target runtime and rebuilds the native module only when the installed ABI does not match. This keeps Electron main, the compatibility Next server, and SQLite on one ABI while allowing `pnpm dev` to recover automatically after Electron development.
 
 The repository-local `data/posterlab.db` remains the browser-preview database. It is neither the Electron-owned database nor an installer input.
 

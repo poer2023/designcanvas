@@ -60,10 +60,10 @@ Open `http://127.0.0.1:3000`. New and existing project cards open the tldraw can
 Electron development:
 
 ```bash
-pnpm run desktop:rebuild
 pnpm run desktop:dev
 ```
 
+The Web, desktop renderer, and desktop test commands detect the active native ABI and rebuild `better-sqlite3` only when switching runtimes requires it. `pnpm run desktop:rebuild` remains available for an explicit Electron rebuild.
 The desktop renderer and desktop tests run with Electron's bundled Node runtime so native SQLite uses one ABI consistently.
 Development data is stored under the OS application-data directory in a dedicated `DesignCanvas` folder, never under the generic Electron profile.
 

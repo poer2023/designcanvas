@@ -10,20 +10,20 @@
     "node": ">=22.12.0 <25"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "node desktop/scripts/run-with-native-runtime.cjs node node_modules/next/dist/bin/next dev",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "desktop:renderer:dev": "node desktop/scripts/electron-node.cjs node_modules/next/dist/bin/next dev",
-    "desktop:renderer:preview": "node desktop/scripts/electron-node.cjs node_modules/next/dist/bin/next start",
+    "desktop:renderer:dev": "node desktop/scripts/run-with-native-runtime.cjs electron node_modules/next/dist/bin/next dev",
+    "desktop:renderer:preview": "node desktop/scripts/run-with-native-runtime.cjs electron node_modules/next/dist/bin/next start",
     "desktop:dev": "concurrently -k -n next,electron -c blue,magenta \"pnpm desktop:renderer:dev\" \"wait-on http://127.0.0.1:3000 && electron desktop/main.cjs\"",
     "desktop:preview": "pnpm build && concurrently -k -n next,electron -c blue,magenta \"pnpm desktop:renderer:preview\" \"wait-on http://127.0.0.1:3000 && electron desktop/main.cjs\"",
-    "desktop:rebuild": "electron-builder install-app-deps",
+    "desktop:rebuild": "electron-rebuild --force --only better-sqlite3",
     "desktop:prepare-renderer": "node desktop/scripts/prepare-renderer.cjs",
     "desktop:dist": "pnpm build && pnpm desktop:prepare-renderer && electron-builder --config electron-builder.yml",
     "desktop:dist:win": "pnpm build && pnpm desktop:prepare-renderer && electron-builder --config electron-builder.yml --win --x64",
     "typecheck": "tsc --noEmit",
-    "test:desktop": "node desktop/scripts/electron-node.cjs --test desktop/services/database.test.cjs"
+    "test:desktop": "node desktop/scripts/run-with-native-runtime.cjs electron --test desktop/services/database.test.cjs"
   },
   "dependencies": {
     "@tldraw/tlschema": "4.5.8",
@@ -44,6 +44,7 @@
     ]
   },
   "devDependencies": {
+    "@electron/rebuild": "4.0.4",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",

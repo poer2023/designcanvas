@@ -45,11 +45,7 @@ pnpm run desktop:dev
 
 `desktop:dev` runs both Electron main and the Next compatibility renderer with Electron's bundled Node runtime. This prevents native SQLite ABI mismatches.
 
-If you later return to browser-only `pnpm run dev` after an Electron rebuild, restore the normal Node native module first:
-
-```powershell
-pnpm rebuild better-sqlite3
-```
+If you later return to browser-only `pnpm run dev` after an Electron rebuild, the startup wrapper detects the ABI mismatch and rebuilds `better-sqlite3` for Node automatically. The desktop commands perform the inverse check before launching Electron.
 
 Set `DESIGNCANVAS_OPEN_DEVTOOLS=1` before the desktop command only when DevTools are needed.
 
