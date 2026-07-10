@@ -28,14 +28,14 @@ The main freeform canvas uses the same core canvas SDK family observed in Lovart
 - typed project, execution-graph, and canvas-document IPC
 - separate `canvas_documents` and `project_graphs` persistence
 - `/projects/[id]/canvas` tldraw workspace
-- custom design cards for briefs, notes, assets, agent tasks, and generation drafts
+- custom design cards for briefs, notes, assets, and agent tasks, plus lightweight image result cards
 - collapsible canvas side panel with only Agent and Assets modes
 - lightweight bottom canvas composer as the primary from-scratch and selected-result generation entry
 - right panel defaults to collapsed and keeps execution history folded
-- selected-node prompts create a downstream iteration card and connect it automatically
+- selected-result prompts create a downstream image result and preserve its workflow relationship
 - generation parameters are available only in a collapsed contextual inspector
-- visible card ports use enlarged hit targets and exact center anchors for persistent curved drag-to-connect bindings; click-to-connect remains available
-- generation cards expose prompt, model, ratio, advanced settings, and run controls directly on the canvas
+- workflow ports and persistent curved bindings appear only while Flow Edit mode is active
+- result cards keep generation controls out of the canvas and show only the image, status, and prompt summary
 - tldraw arrow bindings compile into a directed generation graph with cycle validation
 - run-all and run-from-selected execution with text context, image references, and seed propagation
 - execution graph snapshot persisted to `project_graphs` before each run

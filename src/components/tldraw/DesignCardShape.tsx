@@ -6,9 +6,8 @@ import {
   type RecordProps,
   type TLShape,
 } from 'tldraw';
-import { ImageIcon, LoaderCircle, Play, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { ImageIcon, LoaderCircle } from 'lucide-react';
 import { useEffect, useRef, type SyntheticEvent } from 'react';
-import { useGenerationModels } from './useGenerationModels';
 
 export const DESIGN_CARD_TYPE = 'design-card' as const;
 export const DESIGN_CARD_PORT_EVENT = 'designcanvas:card-port';
@@ -76,8 +75,6 @@ const generationStatusLabel: Record<NonNullable<DesignCardProps['status']>, stri
   done: '完成',
   error: '失败',
 };
-
-const generationRatios = ['1:1', '3:2', '4:5', '16:9'] as const;
 
 function stopCanvasEvent(event: SyntheticEvent) {
   event.stopPropagation();
@@ -191,126 +188,56 @@ function ConnectionPort({
 
 function GenerationCard({ shape }: { shape: DesignCardShape }) {
   const editor = useEditor();
-  const models = useGenerationModels();
   const {
     title,
     body,
-    eyebrow,
     outputUrl,
     status = 'draft',
     error,
-    prompt = body,
     modelId = 'mock:default',
     ratio = '1:1',
   } = shape.props;
-  const modelOptions = models.some((model) => model.model_id === modelId)
-    ? models
-    : [{ model_id: modelId, display_name: modelId, capabilities: [] }, ...models];
   const selectCard = () => {
     editor.select(shape.id);
     editor.setCurrentTool('select');
   };
-  const updateGeneration = (patch: Partial<DesignCardProps>) => {
-    editor.updateShape<DesignCardShape>({
-      id: shape.id,
-      type: DESIGN_CARD_TYPE,
-      props: {
-        ...patch,
-        status: 'draft',
-        outputUrl: '',
-        outputAssetId: '',
-        error: '',
-      },
-    });
-  };
-  const dispatchAction = (action: DesignCardActionEventDetail['action']) => {
+  const openInspector = () => {
     selectCard();
     window.dispatchEvent(new CustomEvent(DESIGN_CARD_ACTION_EVENT, {
-      detail: { action, shapeId: shape.id } satisfies DesignCardActionEventDetail,
+      detail: { action: 'edit', shapeId: shape.id } satisfies DesignCardActionEventDetail,
     }));
   };
+  const processing = status === 'queued' || status === 'running';
 
   return (
     <HTMLContainer
-      className="dc-generation-card"
-      data-testid="generation-card-shape"
+      className="dc-image-result-card"
+      data-testid="image-result-card-shape"
       style={{ pointerEvents: 'all' }}
+      onDoubleClick={(event) => {
+        stopCanvasEvent(event);
+        openInspector();
+      }}
     >
       <ConnectionPort shapeId={shape.id} role="input" title={title} />
       <ConnectionPort shapeId={shape.id} role="output" title={title} />
       <div
-        className="dc-generation-card__preview"
+        className="dc-image-result-card__preview"
         data-status={status}
         style={outputUrl ? { backgroundImage: `url(${JSON.stringify(outputUrl)})` } : undefined}
       >
-        {!outputUrl ? <div className="dc-generation-card__symbol"><ImageIcon size={24} /></div> : null}
-        <span><Sparkles size={12} /> GENERATION DRAFT</span>
+        {!outputUrl ? (
+          <div className="dc-image-result-card__symbol">
+            {processing ? <LoaderCircle className="dc-spin" size={24} /> : <ImageIcon size={24} />}
+          </div>
+        ) : null}
       </div>
-      <div className="dc-generation-card__content">
-        <div className="dc-generation-card__meta">
-          <span>{eyebrow}</span>
-          <span className="dc-generation-card__state" data-status={status}>{generationStatusLabel[status]}</span>
+      <div className="dc-image-result-card__content">
+        <div className="dc-image-result-card__meta">
+          <span>{ratio} · {modelId === 'mock:default' ? 'Mock Generator' : modelId}</span>
+          <span className="dc-image-result-card__state" data-status={status}>{generationStatusLabel[status]}</span>
         </div>
-        <div className="dc-generation-card__title">{title}</div>
-        <div className="dc-generation-card__prompt">{status === 'error' && error ? error : body}</div>
-      </div>
-      <div
-        className="dc-generation-card__composer"
-        onPointerDown={stopCanvasEvent}
-        onDoubleClick={stopCanvasEvent}
-        onKeyDown={stopCanvasEvent}
-      >
-        <textarea
-          aria-label={`${title}提示词`}
-          value={prompt}
-          placeholder="描述想生成的画面…"
-          rows={2}
-          onFocus={selectCard}
-          onChange={(event) => updateGeneration({
-            prompt: event.target.value,
-            body: event.target.value || '描述主体、构图、光线和视觉风格。',
-          })}
-        />
-        <div className="dc-generation-card__composer-footer">
-          <select
-            aria-label={`${title}模型`}
-            title="选择生成模型"
-            value={modelId}
-            onFocus={selectCard}
-            onChange={(event) => updateGeneration({ modelId: event.target.value })}
-          >
-            {modelOptions.map((model) => (
-              <option key={model.model_id} value={model.model_id}>{model.display_name}</option>
-            ))}
-          </select>
-          <select
-            aria-label={`${title}画幅比例`}
-            title="选择画幅比例"
-            value={ratio}
-            onFocus={selectCard}
-            onChange={(event) => updateGeneration({
-              ratio: event.target.value,
-              eyebrow: `GENERATION · ${event.target.value}`,
-            })}
-          >
-            {generationRatios.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-          <button type="button" aria-label="更多生成参数" title="更多生成参数" onClick={() => dispatchAction('edit')}>
-            <SlidersHorizontal size={15} />
-          </button>
-          <button
-            type="button"
-            className="dc-generation-card__run"
-            aria-label="运行此生成节点"
-            title="运行此生成节点"
-            disabled={!prompt.trim() || status === 'running' || status === 'queued'}
-            onClick={() => dispatchAction('run')}
-          >
-            {status === 'running' || status === 'queued'
-              ? <LoaderCircle className="dc-spin" size={15} />
-              : <Play size={15} fill="currentColor" />}
-          </button>
-        </div>
+        <div className="dc-image-result-card__prompt">{status === 'error' && error ? error : body}</div>
       </div>
     </HTMLContainer>
   );

@@ -188,7 +188,8 @@ export function compileGenerationWorkflow(editor: Editor): GenerationWorkflowGra
 export function connectDesignCards(
   editor: Editor,
   sourceId: TLShapeId,
-  targetId: TLShapeId
+  targetId: TLShapeId,
+  options?: { visible?: boolean }
 ) {
   if (sourceId === targetId) throw new Error('节点不能连接到自身。');
   const source = editor.getShape<DesignCardShape>(sourceId);
@@ -220,6 +221,10 @@ export function connectDesignCards(
     type: 'arrow',
     x: start.x,
     y: start.y,
+    meta: {
+      designCanvasConnection: true,
+      designCanvasHidden: options?.visible !== true,
+    },
     props: {
       kind: 'arc',
       start: { x: 0, y: 0 },
@@ -262,7 +267,7 @@ export function connectDesignCards(
   return arrowId;
 }
 
-export function normalizeDesignCardConnections(editor: Editor) {
+export function normalizeDesignCardConnections(editor: Editor, visible = false) {
   let updatedCount = 0;
   editor.run(() => {
     for (const shape of editor.getCurrentPageShapes()) {
@@ -301,44 +306,78 @@ export function normalizeDesignCardConnections(editor: Editor) {
         || end.props.normalizedAnchor.y !== nextEndAnchor.y
       );
       const needsArrowUpdate = arrow.props.kind !== 'arc' || Math.abs(arrow.props.bend - nextBend) > 0.1;
-      if (!needsBindingUpdate && !needsArrowUpdate) continue;
+      const needsMetaUpdate = (
+        arrow.meta.designCanvasConnection !== true
+        || arrow.meta.designCanvasHidden !== !visible
+      );
+      if (!needsBindingUpdate && !needsArrowUpdate && !needsMetaUpdate) continue;
 
-      editor.updateBindings([
-        {
-          id: start.id,
-          type: 'arrow',
-          props: {
-            normalizedAnchor: nextStartAnchor,
-            isExact: true,
-            isPrecise: true,
-            snap: 'none',
+      if (needsBindingUpdate) {
+        editor.updateBindings([
+          {
+            id: start.id,
+            type: 'arrow',
+            props: {
+              normalizedAnchor: nextStartAnchor,
+              isExact: true,
+              isPrecise: true,
+              snap: 'none',
+            },
           },
-        },
-        {
-          id: end.id,
-          type: 'arrow',
-          props: {
-            normalizedAnchor: nextEndAnchor,
-            isExact: true,
-            isPrecise: true,
-            snap: 'none',
+          {
+            id: end.id,
+            type: 'arrow',
+            props: {
+              normalizedAnchor: nextEndAnchor,
+              isExact: true,
+              isPrecise: true,
+              snap: 'none',
+            },
           },
-        },
-      ]);
-      if (needsArrowUpdate) {
+        ]);
+      }
+      if (needsArrowUpdate || needsMetaUpdate) {
         editor.updateShape<TLArrowShape>({
           id: arrow.id,
           type: 'arrow',
-          props: {
-            kind: 'arc',
-            bend: nextBend,
-          },
+          ...(needsArrowUpdate ? {
+            props: {
+              kind: 'arc' as const,
+              bend: nextBend,
+            },
+          } : {}),
+          ...(needsMetaUpdate ? {
+            meta: {
+              ...arrow.meta,
+              designCanvasConnection: true,
+              designCanvasHidden: !visible,
+            },
+          } : {}),
         });
       }
       updatedCount += 1;
     }
   }, { history: 'ignore' });
   return updatedCount;
+}
+
+export function setGenerationConnectionsVisible(editor: Editor, visible: boolean) {
+  const arrows = editor.getCurrentPageShapes().filter((shape): shape is TLArrowShape => (
+    shape.type === 'arrow' && shape.meta.designCanvasConnection === true
+  ));
+  if (arrows.length === 0) return;
+  editor.run(() => {
+    for (const arrow of arrows) {
+      editor.updateShape<TLArrowShape>({
+        id: arrow.id,
+        type: 'arrow',
+        meta: {
+          ...arrow.meta,
+          designCanvasHidden: !visible,
+        },
+      });
+    }
+  }, { history: 'ignore' });
 }
 
 export function serializeGenerationWorkflow(

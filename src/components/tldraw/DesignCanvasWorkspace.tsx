@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
-  ArrowRight,
   ArrowLeft,
   Cable,
   Check,
@@ -33,6 +32,7 @@ import {
   getSnapshot,
   type Editor,
   type TLEditorSnapshot,
+  type TLShape,
   type TLShapeId,
 } from 'tldraw';
 import {
@@ -40,6 +40,7 @@ import {
   normalizeDesignCardConnections,
   persistGenerationWorkflow,
   runGenerationWorkflow,
+  setGenerationConnectionsVisible,
 } from '@/lib/canvas/generationWorkflow';
 import { getDesktopBridge } from '@/lib/desktop/bridge';
 import type { DesktopCanvasDocument, DesktopProject } from '@/lib/desktop/types';
@@ -70,6 +71,10 @@ interface ConnectionDragState {
 const TLDRAW_SCHEMA_VERSION = 'tldraw-4.5';
 const tldrawLicenseKey = process.env.NEXT_PUBLIC_TLDRAW_LICENSE_KEY;
 const tldrawOptions = { maxPages: 1 } as const;
+
+function getDesignCanvasShapeVisibility(shape: TLShape) {
+  return shape.meta.designCanvasHidden === true ? 'hidden' as const : 'inherit' as const;
+}
 
 function getConnectionPreviewPath({ start, current }: ConnectionDragState) {
   const direction = current.x >= start.x ? 1 : -1;
@@ -178,10 +183,9 @@ function createCard(
 
 function seedCanvas(editor: Editor, projectDescription?: string | null) {
   const seeds: Array<{ kind: DesignCardKind; x: number; y: number }> = [
-    { kind: 'brief', x: -420, y: -80 },
-    { kind: 'generate', x: -20, y: -130 },
-    { kind: 'asset', x: 400, y: -80 },
-    { kind: 'note', x: 20, y: 220 },
+    { kind: 'brief', x: -360, y: -100 },
+    { kind: 'asset', x: 360, y: -100 },
+    { kind: 'note', x: 0, y: 190 },
   ];
 
   editor.createShapes<DesignCardShape>(seeds.map(({ kind, x, y }) => ({
@@ -192,22 +196,25 @@ function seedCanvas(editor: Editor, projectDescription?: string | null) {
     props: {
       ...cardPresets[kind],
       ...(kind === 'brief' && projectDescription ? { body: projectDescription } : {}),
-      ...(kind === 'generate' ? {
-        body: projectDescription || cardPresets.generate.body,
-        prompt: projectDescription || cardPresets.generate.body,
-        modelId: 'mock:default',
-        ratio: '1:1',
-        steps: 28,
-        guidance: 7,
-        strength: 0.65,
-        status: 'draft' as const,
-      } : {}),
       kind,
-      w: kind === 'generate' ? 360 : 320,
-      h: kind === 'generate' ? 300 : 188,
+      w: 320,
+      h: 188,
     },
   })));
   editor.zoomToFit({ animation: { duration: 240 } });
+}
+
+function removeLegacyGenerationDraft(editor: Editor) {
+  const legacyDrafts = editor.getCurrentPageShapes().filter((shape) => (
+    shape.type === DESIGN_CARD_TYPE
+    && (shape as DesignCardShape).props.kind === 'generate'
+    && (shape as DesignCardShape).props.status === 'draft'
+    && !(shape as DesignCardShape).props.outputUrl
+    && (shape as DesignCardShape).props.title === '图像生成'
+    && (shape as DesignCardShape).props.prompt === cardPresets.generate.body
+  ));
+  if (legacyDrafts.length > 0) editor.deleteShapes(legacyDrafts.map((shape) => shape.id));
+  return legacyDrafts.length;
 }
 
 function ToolButton({
@@ -242,9 +249,13 @@ function ToolButton({
 function CanvasControls({
   editor,
   variant,
+  flowEditing,
+  onFlowEditingChange,
 }: {
   editor: Editor;
   variant: 'toolbar' | 'stage';
+  flowEditing: boolean;
+  onFlowEditingChange: (editing: boolean) => void;
 }) {
   const [canvasState, setCanvasState] = useState(() => ({
     tool: editor.getCurrentToolId(),
@@ -271,6 +282,7 @@ function CanvasControls({
   }, { scope: 'all' }), [editor]);
 
   const setCurrentTool = (nextTool: string) => {
+    onFlowEditingChange(false);
     editor.setCurrentTool(nextTool);
   };
 
@@ -279,6 +291,13 @@ function CanvasControls({
   if (variant === 'toolbar') {
     return (
       <div className="dc-canvas-toolbar" role="toolbar" aria-label="画布工具">
+        <ToolButton label="撤销" disabled={!canUndo} onClick={() => editor.undo()}>
+          <Undo2 size={17} />
+        </ToolButton>
+        <ToolButton label="重做" disabled={!canRedo} onClick={() => editor.redo()}>
+          <Redo2 size={17} />
+        </ToolButton>
+        <span className="dc-toolbar-divider" />
         <ToolButton label="选择" active={tool === 'select'} onClick={() => setCurrentTool('select')}>
           <MousePointer2 size={18} />
         </ToolButton>
@@ -298,9 +317,6 @@ function CanvasControls({
         <ToolButton label="执行任务" onClick={() => createCard(editor, 'task')}>
           <WandSparkles size={18} />
         </ToolButton>
-        <ToolButton label="生成卡片" onClick={() => createCard(editor, 'generate')}>
-          <ImagePlus size={18} />
-        </ToolButton>
         <span className="dc-toolbar-divider" />
         <ToolButton label="画笔" active={tool === 'draw'} onClick={() => setCurrentTool('draw')}>
           <PenLine size={18} />
@@ -311,36 +327,33 @@ function CanvasControls({
         <ToolButton label="画框" active={tool === 'frame'} onClick={() => setCurrentTool('frame')}>
           <Frame size={18} />
         </ToolButton>
-        <ToolButton label="连接节点" active={tool === 'arrow'} onClick={() => setCurrentTool('arrow')}>
-          <ArrowRight size={18} />
+        <ToolButton
+          label={flowEditing ? '退出流程编辑' : '流程编辑'}
+          active={flowEditing}
+          onClick={() => {
+            editor.setCurrentTool('select');
+            onFlowEditingChange(!flowEditing);
+          }}
+        >
+          <Cable size={18} />
         </ToolButton>
       </div>
     );
   }
 
   return (
-    <>
-      <div className="dc-history-controls">
-        <ToolButton label="撤销" disabled={!canUndo} onClick={() => editor.undo()}>
-          <Undo2 size={17} />
-        </ToolButton>
-        <ToolButton label="重做" disabled={!canRedo} onClick={() => editor.redo()}>
-          <Redo2 size={17} />
-        </ToolButton>
-      </div>
-      <div className="dc-zoom-controls">
-        <ToolButton label="缩小" onClick={() => editor.zoomOut(editor.getViewportScreenCenter())}>
-          <ZoomOut size={16} />
-        </ToolButton>
-        <span className="dc-zoom-value">{Math.round(zoom * 100)}%</span>
-        <ToolButton label="放大" onClick={() => editor.zoomIn(editor.getViewportScreenCenter())}>
-          <ZoomIn size={16} />
-        </ToolButton>
-        <ToolButton label="适合画布" onClick={() => editor.zoomToFit({ animation: { duration: 180 } })}>
-          <Maximize2 size={16} />
-        </ToolButton>
-      </div>
-    </>
+    <div className="dc-zoom-controls">
+      <ToolButton label="缩小" onClick={() => editor.zoomOut(editor.getViewportScreenCenter())}>
+        <ZoomOut size={16} />
+      </ToolButton>
+      <span className="dc-zoom-value">{Math.round(zoom * 100)}%</span>
+      <ToolButton label="放大" onClick={() => editor.zoomIn(editor.getViewportScreenCenter())}>
+        <ZoomIn size={16} />
+      </ToolButton>
+      <ToolButton label="适合画布" onClick={() => editor.zoomToFit({ animation: { duration: 180 } })}>
+        <Maximize2 size={16} />
+      </ToolButton>
+    </div>
   );
 }
 
@@ -379,6 +392,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
   const [canvasDocument, setCanvasDocument] = useState<DesktopCanvasDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [flowEditing, setFlowEditing] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [inspectorRequestId, setInspectorRequestId] = useState(0);
   const generationActionIdRef = useRef(0);
@@ -491,6 +505,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
     if (!canvasDocument && mountedEditor.getCurrentPageShapes().length === 0) {
       seedCanvas(mountedEditor, project?.description);
     }
+    const removedLegacyDraftCount = removeLegacyGenerationDraft(mountedEditor);
     const normalizedConnectionCount = normalizeDesignCardConnections(mountedEditor);
 
     const removeDocumentListener = mountedEditor.store.listen(
@@ -506,8 +521,22 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
       removeSessionListener();
     };
 
-    if (!canvasDocument || normalizedConnectionCount > 0) queueSave(mountedEditor, 0);
+    if (!canvasDocument || removedLegacyDraftCount > 0 || normalizedConnectionCount > 0) {
+      queueSave(mountedEditor, 0);
+    }
   }, [canvasDocument, project?.description, queueSave]);
+
+  const changeFlowEditing = useCallback((editing: boolean) => {
+    if (editor) setGenerationConnectionsVisible(editor, editing);
+    if (!editing) {
+      pendingConnectionSourceRef.current = null;
+      connectionDragRef.current = null;
+      setPendingConnectionSourceId(null);
+      setConnectionDrag(null);
+      setConnectionMessage(null);
+    }
+    setFlowEditing(editing);
+  }, [editor]);
 
   const createGenerationCard = useCallback((input: GenerationCardInput, afterShapeId?: TLShapeId) => {
     if (!editor) return null;
@@ -597,7 +626,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
   }, [editor, executeGenerationWorkflow]);
 
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || !flowEditing) return;
     const updatePendingConnection = (shapeId: TLShapeId | null) => {
       pendingConnectionSourceRef.current = shapeId;
       setPendingConnectionSourceId(shapeId);
@@ -612,7 +641,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
     };
     const createConnection = (sourceId: TLShapeId, targetId: TLShapeId) => {
       try {
-        connectDesignCards(editor, sourceId, targetId);
+        connectDesignCards(editor, sourceId, targetId, { visible: true });
         updatePendingConnection(null);
         showConnectionResult('连接已创建');
       } catch (error) {
@@ -680,7 +709,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
       window.removeEventListener(DESIGN_CARD_PORT_EVENT, handlePort);
       window.removeEventListener('keydown', cancelConnection);
     };
-  }, [editor]);
+  }, [editor, flowEditing]);
 
   if (loading || !project) {
     return (
@@ -691,7 +720,11 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
   }
 
   return (
-    <div className="dc-workspace" data-connecting={pendingConnectionSourceId || connectionDrag ? true : undefined}>
+    <div
+      className="dc-workspace"
+      data-connecting={pendingConnectionSourceId || connectionDrag ? true : undefined}
+      data-flow-editing={flowEditing || undefined}
+    >
       <header className="dc-topbar">
         <div className="dc-topbar-left">
           <button type="button" className="dc-topbar-icon" onClick={() => router.push('/')} aria-label="返回项目" title="返回项目">
@@ -700,7 +733,14 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
           <div className="dc-product-mark"><Layers3 size={15} /></div>
           <div className="dc-project-name">{project.name}</div>
         </div>
-        {editor ? <CanvasControls editor={editor} variant="toolbar" /> : null}
+        {editor ? (
+          <CanvasControls
+            editor={editor}
+            variant="toolbar"
+            flowEditing={flowEditing}
+            onFlowEditingChange={changeFlowEditing}
+          />
+        ) : null}
         <div className="dc-topbar-right">
           <span className="dc-local-badge">LOCAL</span>
           <SaveIndicator
@@ -719,16 +759,25 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
         <main className="dc-canvas-stage">
           <Tldraw
             hideUi
+            getShapeVisibility={getDesignCanvasShapeVisibility}
             licenseKey={tldrawLicenseKey}
             onMount={handleMount}
             shapeUtils={designCardShapeUtils}
             snapshot={canvasDocument?.snapshot as unknown as TLEditorSnapshot | undefined}
             options={tldrawOptions}
           />
-          {editor ? <CanvasControls editor={editor} variant="stage" /> : null}
+          {editor ? (
+            <CanvasControls
+              editor={editor}
+              variant="stage"
+              flowEditing={flowEditing}
+              onFlowEditingChange={changeFlowEditing}
+            />
+          ) : null}
           <CanvasPromptComposer
             editor={editor}
             running={generationRunning}
+            connectionsVisible={flowEditing}
             onCreateGeneration={createGenerationCard}
             onRunWorkflow={executeGenerationWorkflow}
           />

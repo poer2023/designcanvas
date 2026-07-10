@@ -69,7 +69,7 @@ Human law: A project remains valuable when every generation provider is disabled
 Machine law:
 
 - Trigger: adding generation behavior.
-- Required action: capture intent in a lightweight generation card; execute through a task/provider adapter whose outputs become assets.
+- Required action: capture intent in the bottom composer; execute through a task/provider adapter whose outputs become lightweight image result cards and reusable assets.
 - Evidence: briefs, notes, assets, layout, editing, and export remain usable offline.
 - Exception: none.
 
@@ -85,8 +85,8 @@ Machine law:
 
 - Electron can own project, execution graph, and tldraw document persistence.
 - A project opens in a real tldraw canvas with custom domain shapes.
-- Generation drafts can be added, saved, and restored without a provider connection.
-- Generation cards can be connected with arrows, compiled into an acyclic execution graph, and run from all nodes or a selected node.
+- Generation requests and results can be saved and restored without exposing provider execution forms on the canvas.
+- Image results and workflow inputs can be connected in Flow Edit mode, compiled into an acyclic execution graph, and run from all nodes or a selected node.
 - Downstream generation receives upstream image references and seed values without embedding image binaries in shape props.
 - Pan, zoom, selection, resize, draw, text, frame, undo, and redo work.
 - Canvas content and camera state survive reload.

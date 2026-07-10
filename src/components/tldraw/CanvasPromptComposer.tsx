@@ -15,6 +15,7 @@ import { useGenerationModels } from './useGenerationModels';
 interface CanvasPromptComposerProps {
   editor: Editor | null;
   running: boolean;
+  connectionsVisible: boolean;
   onCreateGeneration: (input: GenerationNodeInput, afterShapeId?: TLShapeId) => TLShapeId | null;
   onRunWorkflow: (startNodeId?: TLShapeId) => Promise<void>;
 }
@@ -22,6 +23,7 @@ interface CanvasPromptComposerProps {
 export default function CanvasPromptComposer({
   editor,
   running,
+  connectionsVisible,
   onCreateGeneration,
   onRunWorkflow,
 }: CanvasPromptComposerProps) {
@@ -61,7 +63,7 @@ export default function CanvasPromptComposer({
     if (!createdId) return;
     if (sourceId) {
       try {
-        connectDesignCards(editor, sourceId, createdId);
+        connectDesignCards(editor, sourceId, createdId, { visible: connectionsVisible });
       } catch {
         // The new result still runs when an optional iteration link cannot be created.
       }
