@@ -1,58 +1,39 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  ArrowUp,
   Bot,
   FolderOpen,
-  ImagePlus,
-  ListTodo,
   LoaderCircle,
   Network,
   PanelRightClose,
   Play,
-  Plus,
   SlidersHorizontal,
-  Sparkles,
   Upload,
 } from 'lucide-react';
 import type { Editor, TLShapeId } from 'tldraw';
 import {
   GENERATION_RATIOS,
   compileGenerationWorkflow,
-  connectDesignCards,
   getGenerationNodeInput,
-  persistGenerationWorkflow,
-  runGenerationWorkflow,
   type GenerationNodeInput,
 } from '@/lib/canvas/generationWorkflow';
 import {
   DESIGN_CARD_TYPE,
   type DesignCardShape,
 } from './DesignCardShape';
+import { useGenerationModels } from './useGenerationModels';
 
 export type GenerationCardInput = GenerationNodeInput;
 
 interface CanvasSidePanelProps {
   editor: Editor | null;
-  projectId: string;
   inspectorRequestId: number;
-  runRequest: GenerationRunRequest | null;
-  onCreateTask: (title: string, body: string) => void;
-  onCreateGeneration: (input: GenerationCardInput, afterShapeId?: TLShapeId) => TLShapeId | null;
+  running: boolean;
+  runResult: string | null;
+  onRunWorkflow: (startNodeId?: TLShapeId) => Promise<void>;
   onImportAssets: () => Promise<number>;
   onCollapse: () => void;
-}
-
-export interface GenerationRunRequest {
-  id: number;
-  shapeId: TLShapeId;
-}
-
-interface ImageModel {
-  model_id: string;
-  display_name: string;
-  capabilities: Array<'text2img' | 'img2img' | 'vision'>;
 }
 
 interface WorkflowSummary {
@@ -63,14 +44,7 @@ interface WorkflowSummary {
   selectedGenerationFingerprint: string | null;
 }
 
-interface AgentMessage {
-  id: number;
-  role: 'user' | 'agent';
-  text: string;
-}
-
 type PanelMode = 'agent' | 'assets';
-type ComposerAction = 'generate' | 'task';
 
 const defaultGenerationInput: GenerationCardInput = {
   prompt: '',
@@ -128,29 +102,20 @@ function readWorkflowSummary(editor: Editor | null): WorkflowSummary {
 
 export default function CanvasSidePanel({
   editor,
-  projectId,
   inspectorRequestId,
-  runRequest,
-  onCreateTask,
-  onCreateGeneration,
+  running,
+  runResult,
+  onRunWorkflow,
   onImportAssets,
   onCollapse,
 }: CanvasSidePanelProps) {
   const ready = Boolean(editor);
-  const messageIdRef = useRef(0);
-  const lastRunRequestIdRef = useRef(0);
-  const runWorkflowRef = useRef<(startNodeId?: TLShapeId) => Promise<void>>(async () => {});
+  const models = useGenerationModels();
   const [mode, setMode] = useState<PanelMode>('agent');
   const [inspectorOpen, setInspectorOpen] = useState(false);
-  const [agentPrompt, setAgentPrompt] = useState('');
-  const [composerAction, setComposerAction] = useState<ComposerAction>('generate');
-  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [generationInput, setGenerationInput] = useState(defaultGenerationInput);
-  const [models, setModels] = useState<ImageModel[]>([]);
   const [workflow, setWorkflow] = useState<WorkflowSummary>(() => readWorkflowSummary(editor));
-  const [messages, setMessages] = useState<AgentMessage[]>([]);
-  const [running, setRunning] = useState(false);
-  const [runResult, setRunResult] = useState<string | null>(null);
+  const [inspectorNotice, setInspectorNotice] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
 
@@ -178,62 +143,8 @@ export default function CanvasSidePanel({
     setInspectorOpen(true);
   }, [inspectorRequestId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/settings/models?enabled=true')
-      .then((response) => response.json())
-      .then((payload: { success?: boolean; data?: ImageModel[] }) => {
-        if (cancelled || !payload.success || !payload.data) return;
-        setModels(payload.data.filter((model) => (
-          model.capabilities.includes('text2img') || model.capabilities.includes('img2img')
-        )));
-      })
-      .catch((error) => console.error('Failed to load image models:', error));
-    return () => { cancelled = true; };
-  }, []);
-
-  const appendMessage = (role: AgentMessage['role'], text: string) => {
-    messageIdRef.current += 1;
-    const id = messageIdRef.current;
-    setMessages((current) => [...current, { id, role, text }]);
-  };
-
   const patchGenerationInput = (patch: Partial<GenerationCardInput>) => {
     setGenerationInput((current) => ({ ...current, ...patch }));
-  };
-
-  const submitAgentPrompt = () => {
-    const prompt = agentPrompt.trim();
-    if (!editor || !prompt) return;
-    appendMessage('user', prompt);
-
-    if (composerAction === 'task') {
-      onCreateTask(prompt.slice(0, 28), prompt);
-      appendMessage('agent', '任务卡片已添加到画布');
-      setAgentPrompt('');
-      return;
-    }
-
-    const sourceId = workflow.selectedGenerationId ?? undefined;
-    const nextInput = sourceId
-      ? { ...generationInput, prompt, seed: undefined }
-      : { ...defaultGenerationInput, modelId: generationInput.modelId, prompt };
-    const createdId = onCreateGeneration(nextInput, sourceId);
-    if (!createdId) {
-      appendMessage('agent', '生成节点创建失败');
-      return;
-    }
-    if (sourceId) {
-      try {
-        connectDesignCards(editor, sourceId, createdId);
-        appendMessage('agent', '下游迭代节点已创建并连接');
-      } catch (error) {
-        appendMessage('agent', error instanceof Error ? error.message : '节点已创建，但连接失败');
-      }
-    } else {
-      appendMessage('agent', '生成节点已添加到画布');
-    }
-    setAgentPrompt('');
   };
 
   const saveSelectedGeneration = () => {
@@ -259,33 +170,9 @@ export default function CanvasSidePanel({
         error: '',
       },
     });
-    setRunResult('节点设置已更新');
+    setInspectorNotice('节点设置已保存');
+    window.setTimeout(() => setInspectorNotice(null), 1400);
   };
-
-  const runWorkflow = async (startNodeId?: TLShapeId) => {
-    if (!editor || running) return;
-    setRunning(true);
-    setRunResult(startNodeId ? '正在运行所选节点及下游…' : '正在运行全部节点…');
-    try {
-      const graph = await persistGenerationWorkflow(projectId, editor);
-      const report = await runGenerationWorkflow(editor, startNodeId, graph);
-      await persistGenerationWorkflow(projectId, editor);
-      setRunResult(`已完成 ${report.completedNodeIds.length} 个节点`);
-    } catch (error) {
-      setRunResult(error instanceof Error ? error.message : '工作流运行失败');
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  runWorkflowRef.current = runWorkflow;
-
-  useEffect(() => {
-    if (!runRequest || runRequest.id === lastRunRequestIdRef.current) return;
-    lastRunRequestIdRef.current = runRequest.id;
-    setMode('agent');
-    void runWorkflowRef.current(runRequest.shapeId);
-  }, [runRequest]);
 
   const importAssets = async () => {
     if (!ready || importing) return;
@@ -324,10 +211,10 @@ export default function CanvasSidePanel({
               <div><strong>Design Agent</strong><small>{workflow.nodes} 节点 · {workflow.edges} 连接</small></div>
             </div>
             <div className="dc-agent-run-actions">
-              <button type="button" aria-label="从所选节点运行" title="从所选节点运行" disabled={!workflow.selectedGenerationId || running || Boolean(workflow.error)} onClick={() => void runWorkflow(workflow.selectedGenerationId ?? undefined)}>
+              <button type="button" aria-label="从所选节点运行" title="从所选节点运行" disabled={!workflow.selectedGenerationId || running || Boolean(workflow.error)} onClick={() => void onRunWorkflow(workflow.selectedGenerationId ?? undefined)}>
                 <Network size={15} />
               </button>
-              <button type="button" aria-label="运行全部节点" title="运行全部节点" disabled={workflow.nodes === 0 || running || Boolean(workflow.error)} onClick={() => void runWorkflow()}>
+              <button type="button" aria-label="运行全部节点" title="运行全部节点" disabled={workflow.nodes === 0 || running || Boolean(workflow.error)} onClick={() => void onRunWorkflow()}>
                 {running ? <LoaderCircle className="dc-spin" size={15} /> : <Play size={15} />}
               </button>
             </div>
@@ -335,20 +222,15 @@ export default function CanvasSidePanel({
 
           {workflow.error ? <div className="dc-agent-notice" data-error>{workflow.error}</div> : null}
 
-          <div className="dc-agent-thread" aria-live="polite">
-            {messages.length === 0 && !runResult ? (
-              <div className="dc-agent-empty">
-                <Sparkles size={18} />
-                <span>画布已就绪</span>
-              </div>
-            ) : null}
-            {messages.map((message) => (
-              <div key={message.id} className="dc-agent-message" data-role={message.role}>
-                {message.text}
-              </div>
-            ))}
-            {runResult ? <div className="dc-agent-message" data-role="agent">{runResult}</div> : null}
-          </div>
+          {runResult ? (
+            <details className="dc-run-history">
+              <summary>
+                <span>运行记录</span>
+                <small>{running ? '生成中' : '最近一次'}</small>
+              </summary>
+              <div aria-live="polite">{runResult}</div>
+            </details>
+          ) : null}
 
           {workflow.selectedGenerationId ? (
             <details
@@ -388,48 +270,10 @@ export default function CanvasSidePanel({
                 </div>
 
                 <button type="button" className="dc-secondary-action" disabled={!generationInput.prompt.trim()} onClick={saveSelectedGeneration}>保存节点设置</button>
+                {inspectorNotice ? <div className="dc-inspector-notice" aria-live="polite">{inspectorNotice}</div> : null}
               </div>
             </details>
           ) : null}
-
-          <div className="dc-agent-composer">
-            <textarea
-              aria-label="Agent 输入"
-              value={agentPrompt}
-              onChange={(event) => setAgentPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  submitAgentPrompt();
-                }
-              }}
-              placeholder={workflow.selectedGenerationId ? '描述下一步迭代…' : '让 Agent 在画布上完成什么？'}
-              rows={3}
-            />
-            <div className="dc-agent-composer__footer">
-              <div className="dc-composer-menu-wrap">
-                <button type="button" className="dc-composer-icon" aria-label="选择卡片类型" title="选择卡片类型" onClick={() => setComposerMenuOpen((open) => !open)}>
-                  <Plus size={17} />
-                </button>
-                {composerMenuOpen ? (
-                  <div className="dc-composer-menu" role="menu">
-                    <button type="button" role="menuitem" data-active={composerAction === 'generate' || undefined} onClick={() => { setComposerAction('generate'); setComposerMenuOpen(false); }}>
-                      <ImagePlus size={15} /> 生成节点
-                    </button>
-                    <button type="button" role="menuitem" data-active={composerAction === 'task' || undefined} onClick={() => { setComposerAction('task'); setComposerMenuOpen(false); }}>
-                      <ListTodo size={15} /> 任务卡片
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              <span className="dc-composer-target">
-                {composerAction === 'task' ? '任务卡片' : workflow.selectedGenerationId ? '基于所选节点' : '生成节点'}
-              </span>
-              <button type="button" className="dc-composer-send" aria-label="发送给 Agent" title="发送给 Agent" disabled={!ready || !agentPrompt.trim()} onClick={submitAgentPrompt}>
-                <ArrowUp size={17} />
-              </button>
-            </div>
-          </div>
         </div>
       ) : null}
 

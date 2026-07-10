@@ -38,6 +38,8 @@ import {
 import {
   connectDesignCards,
   normalizeDesignCardConnections,
+  persistGenerationWorkflow,
+  runGenerationWorkflow,
 } from '@/lib/canvas/generationWorkflow';
 import { getDesktopBridge } from '@/lib/desktop/bridge';
 import type { DesktopCanvasDocument, DesktopProject } from '@/lib/desktop/types';
@@ -53,8 +55,8 @@ import {
 } from './DesignCardShape';
 import CanvasSidePanel, {
   type GenerationCardInput,
-  type GenerationRunRequest,
 } from './CanvasSidePanel';
+import CanvasPromptComposer from './CanvasPromptComposer';
 
 type SaveStatus = 'saved' | 'saving' | 'error' | 'conflict';
 
@@ -368,10 +370,12 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
   const [canvasDocument, setCanvasDocument] = useState<DesktopCanvasDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [inspectorRequestId, setInspectorRequestId] = useState(0);
-  const [generationRunRequest, setGenerationRunRequest] = useState<GenerationRunRequest | null>(null);
   const generationActionIdRef = useRef(0);
+  const generationRunningRef = useRef(false);
+  const [generationRunning, setGenerationRunning] = useState(false);
+  const [generationRunResult, setGenerationRunResult] = useState<string | null>(null);
   const [pendingConnectionSourceId, setPendingConnectionSourceId] = useState<TLShapeId | null>(null);
   const pendingConnectionSourceRef = useRef<TLShapeId | null>(null);
   const [connectionDrag, setConnectionDrag] = useState<ConnectionDragState | null>(null);
@@ -496,15 +500,6 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
     if (!canvasDocument || normalizedConnectionCount > 0) queueSave(mountedEditor, 0);
   }, [canvasDocument, project?.description, queueSave]);
 
-  const createTaskCard = useCallback((title: string, body: string) => {
-    if (!editor) return;
-    createCard(editor, 'task', { x: 0, y: 0 }, {
-      title,
-      eyebrow: 'AGENT TASK',
-      body,
-    });
-  }, [editor]);
-
   const createGenerationCard = useCallback((input: GenerationCardInput, afterShapeId?: TLShapeId) => {
     if (!editor) return null;
     const sourceBounds = afterShapeId ? editor.getShapePageBounds(afterShapeId) : undefined;
@@ -523,6 +518,24 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
       status: 'draft',
     }, sourceBounds ? { x: sourceBounds.maxX + 120, y: sourceBounds.minY } : undefined);
   }, [editor]);
+
+  const executeGenerationWorkflow = useCallback(async (startNodeId?: TLShapeId) => {
+    if (!editor || generationRunningRef.current) return;
+    generationRunningRef.current = true;
+    setGenerationRunning(true);
+    setGenerationRunResult(startNodeId ? '正在生成所选内容…' : '正在运行画布配方…');
+    try {
+      const graph = await persistGenerationWorkflow(projectId, editor);
+      const report = await runGenerationWorkflow(editor, startNodeId, graph);
+      await persistGenerationWorkflow(projectId, editor);
+      setGenerationRunResult(`已生成 ${report.completedNodeIds.length} 个结果`);
+    } catch (error) {
+      setGenerationRunResult(error instanceof Error ? error.message : '生成失败');
+    } finally {
+      generationRunningRef.current = false;
+      setGenerationRunning(false);
+    }
+  }, [editor, projectId]);
 
   const importAssets = useCallback(async () => {
     if (!editor) return 0;
@@ -562,20 +575,17 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
       if (!shape || shape.type !== DESIGN_CARD_TYPE || shape.props.kind !== 'generate') return;
       editor.select(shape.id);
       editor.setCurrentTool('select');
-      setPanelOpen(true);
-      generationActionIdRef.current += 1;
       if (detail.action === 'edit') {
+        setPanelOpen(true);
+        generationActionIdRef.current += 1;
         setInspectorRequestId(generationActionIdRef.current);
         return;
       }
-      setGenerationRunRequest({
-        id: generationActionIdRef.current,
-        shapeId: shape.id,
-      });
+      void executeGenerationWorkflow(shape.id);
     };
     window.addEventListener(DESIGN_CARD_ACTION_EVENT, handleCardAction);
     return () => window.removeEventListener(DESIGN_CARD_ACTION_EVENT, handleCardAction);
-  }, [editor]);
+  }, [editor, executeGenerationWorkflow]);
 
   useEffect(() => {
     if (!editor) return;
@@ -706,6 +716,12 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
             options={tldrawOptions}
           />
           {editor ? <CanvasControls editor={editor} /> : null}
+          <CanvasPromptComposer
+            editor={editor}
+            running={generationRunning}
+            onCreateGeneration={createGenerationCard}
+            onRunWorkflow={executeGenerationWorkflow}
+          />
           {connectionDrag ? (
             <svg className="dc-connection-preview" aria-hidden="true">
               <path d={getConnectionPreviewPath(connectionDrag)} data-target={connectionDrag.targetId ? true : undefined} />
@@ -735,11 +751,10 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
         {panelOpen ? (
           <CanvasSidePanel
             editor={editor}
-            projectId={projectId}
             inspectorRequestId={inspectorRequestId}
-            runRequest={generationRunRequest}
-            onCreateTask={createTaskCard}
-            onCreateGeneration={createGenerationCard}
+            running={generationRunning}
+            runResult={generationRunResult}
+            onRunWorkflow={executeGenerationWorkflow}
             onImportAssets={importAssets}
             onCollapse={() => setPanelOpen(false)}
           />

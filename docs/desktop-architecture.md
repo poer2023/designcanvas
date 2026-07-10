@@ -24,7 +24,7 @@ React renderer
   project library
   tldraw freeform canvas
   collapsible agent / asset modes
-  agent composer + contextual generation inspector
+  lightweight canvas composer + collapsed contextual inspector
   archived editors excluded from navigation
 ```
 
@@ -61,6 +61,8 @@ Zustand
 Canvas shapes must reference heavy assets by ID. Dragging the enlarged hit target around a visible right output port onto a left input port shows a live connection preview and creates an exact, center-anchored curved tldraw arrow binding; click-output then click-input is retained as a fallback. Existing card connections are normalized on load. These bindings are compiled into `project_graphs` before each run, and freeform visual position is never an execution dependency. Generation-to-generation edges pass output asset references, image URLs, and seeds into downstream `img2img` parameters.
 
 Generation cards are directly operable on the canvas: prompt editing, model and ratio selection, advanced inspector access, and node execution are all visible. Card actions select the node and coordinate with the Agent panel through typed local UI events. Store listeners persist both user gestures and programmatic updates, including arrows, parameters, status changes, and generated results.
+
+The global generation entry is a single-row composer floating above the bottom canvas toolbar. It creates and immediately runs a root generation when no result is selected, or creates a connected iteration from the selected generation. Execution orchestration belongs to the workspace so the bottom composer, card run action, and right-panel run controls share one state machine. The right panel defaults to closed; when opened, run history is folded and the advanced inspector remains contextual.
 
 ## Native Database
 

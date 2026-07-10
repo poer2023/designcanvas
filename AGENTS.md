@@ -15,8 +15,9 @@ DesignCanvas is a Windows-first, local-first design workspace. The infinite canv
 - The tldraw workspace is the only user-facing editor. Do not expose archived React Flow routes or navigation.
 - Generation is represented by lightweight canvas cards; actual provider execution belongs to workers and job storage.
 - A generation card must expose its prompt, model, ratio, advanced-settings entry, and run action on the card itself. The right inspector may add depth but cannot be the only discoverable control surface.
-- The right panel has only Agent and Assets modes. Generation nodes and their parameters belong inside Agent, not in a separate application mode.
-- Agent opens as a natural-language composer and activity thread. Node parameters stay in a collapsed contextual inspector and must not replace the composer as the panel's primary surface.
+- The right panel has only Agent and Assets modes and defaults to collapsed. It contains advanced node parameters and folded run history, not the global generation input.
+- The lightweight bottom canvas composer is the primary generation entry. With no selected generation it starts a new image; with a selected result it creates and runs an iteration.
+- Execution progress must remain compact: use the send-button spinner and result-card status. Detailed run history stays collapsed unless the user opens it.
 - Heavy binaries live in the asset store. Canvas shapes reference stable asset IDs.
 - Existing projects must open and remain editable without a network connection.
 - Provider-specific payloads stay behind adapters and workers, not in shape props.

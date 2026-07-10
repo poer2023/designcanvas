@@ -7,7 +7,8 @@ import {
   type TLShape,
 } from 'tldraw';
 import { ImageIcon, LoaderCircle, Play, SlidersHorizontal, Sparkles } from 'lucide-react';
-import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
+import { useEffect, useRef, type SyntheticEvent } from 'react';
+import { useGenerationModels } from './useGenerationModels';
 
 export const DESIGN_CARD_TYPE = 'design-card' as const;
 export const DESIGN_CARD_PORT_EVENT = 'designcanvas:card-port';
@@ -77,42 +78,6 @@ const generationStatusLabel: Record<NonNullable<DesignCardProps['status']>, stri
 };
 
 const generationRatios = ['1:1', '3:2', '4:5', '16:9'] as const;
-
-interface GenerationModelOption {
-  model_id: string;
-  display_name: string;
-  capabilities: string[];
-}
-
-let generationModelsPromise: Promise<GenerationModelOption[]> | null = null;
-
-function loadGenerationModels() {
-  if (!generationModelsPromise) {
-    generationModelsPromise = fetch('/api/settings/models?enabled=true')
-      .then((response) => response.json())
-      .then((payload: { success?: boolean; data?: GenerationModelOption[] }) => (
-        payload.success && payload.data
-          ? payload.data.filter((model) => (
-            model.capabilities.includes('text2img') || model.capabilities.includes('img2img')
-          ))
-          : []
-      ))
-      .catch(() => []);
-  }
-  return generationModelsPromise;
-}
-
-function useGenerationModels() {
-  const [models, setModels] = useState<GenerationModelOption[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    void loadGenerationModels().then((nextModels) => {
-      if (!cancelled) setModels(nextModels);
-    });
-    return () => { cancelled = true; };
-  }, []);
-  return models;
-}
 
 function stopCanvasEvent(event: SyntheticEvent) {
   event.stopPropagation();

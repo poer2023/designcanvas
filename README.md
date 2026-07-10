@@ -30,7 +30,8 @@ The main freeform canvas uses the same core canvas SDK family observed in Lovart
 - `/projects/[id]/canvas` tldraw workspace
 - custom design cards for briefs, notes, assets, agent tasks, and generation drafts
 - collapsible canvas side panel with only Agent and Assets modes
-- Lovart-style Agent composer as the primary right-panel interaction
+- lightweight bottom canvas composer as the primary from-scratch and selected-result generation entry
+- right panel defaults to collapsed and keeps execution history folded
 - selected-node prompts create a downstream iteration card and connect it automatically
 - generation parameters are available only in a collapsed contextual inspector
 - visible card ports use enlarged hit targets and exact center anchors for persistent curved drag-to-connect bindings; click-to-connect remains available
