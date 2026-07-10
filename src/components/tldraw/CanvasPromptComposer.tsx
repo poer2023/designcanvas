@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState, useSyncExternalStore } from 'react';
-import { ArrowUp, LoaderCircle, Sparkles } from 'lucide-react';
+import { ArrowUp, LoaderCircle } from 'lucide-react';
 import type { Editor, TLShapeId } from 'tldraw';
 import {
   GENERATION_RATIOS,
@@ -87,7 +87,6 @@ export default function CanvasPromptComposer({
         submit();
       }}
     >
-      <Sparkles className="dc-canvas-composer__spark" size={17} />
       <textarea
         aria-label="画布生成输入"
         value={prompt}

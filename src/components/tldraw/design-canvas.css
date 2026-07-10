@@ -27,6 +27,7 @@
 
 .dc-topbar {
   height: 48px;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -167,23 +168,18 @@
   min-height: 52px;
   position: absolute;
   left: 50%;
-  bottom: 76px;
+  bottom: 14px;
   display: grid;
-  grid-template-columns: 30px minmax(140px, 1fr) auto 132px 64px 38px;
+  grid-template-columns: minmax(140px, 1fr) auto 132px 64px 38px;
   align-items: center;
   gap: 6px;
-  padding: 6px 7px 6px 10px;
+  padding: 6px 7px 6px 12px;
   border: 1px solid #d8d8d3;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 10px 28px rgba(32, 32, 29, 0.14);
   transform: translateX(-50%);
   z-index: 32;
-}
-
-.dc-canvas-composer__spark {
-  color: #777771;
-  justify-self: center;
 }
 
 .dc-canvas-composer textarea {
@@ -816,8 +812,18 @@
 
 .dc-canvas-toolbar {
   left: 50%;
-  bottom: 14px;
-  transform: translateX(-50%);
+  top: 50%;
+  bottom: auto;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: translate(-50%, -50%);
+}
+
+.dc-canvas-toolbar .dc-tool-button {
+  width: 32px;
+  height: 32px;
 }
 
 .dc-history-controls {
@@ -826,8 +832,10 @@
 }
 
 .dc-zoom-controls {
-  left: 12px;
-  bottom: 14px;
+  top: 12px;
+  right: 12px;
+  bottom: auto;
+  left: auto;
 }
 
 .dc-toolbar-divider {
@@ -1296,9 +1304,19 @@
     min-width: 320px;
   }
 
-  .dc-canvas-toolbar {
-    left: auto;
-    right: 12px;
-    transform: none;
+  .dc-project-name {
+    max-width: 180px;
+  }
+
+  .dc-canvas-toolbar .dc-tool-button {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+@media (max-width: 900px) {
+  .dc-project-name,
+  .dc-local-badge {
+    display: none;
   }
 }

@@ -239,7 +239,13 @@ function ToolButton({
   );
 }
 
-function CanvasControls({ editor }: { editor: Editor }) {
+function CanvasControls({
+  editor,
+  variant,
+}: {
+  editor: Editor;
+  variant: 'toolbar' | 'stage';
+}) {
   const [canvasState, setCanvasState] = useState(() => ({
     tool: editor.getCurrentToolId(),
     zoom: editor.getZoomLevel(),
@@ -270,17 +276,8 @@ function CanvasControls({ editor }: { editor: Editor }) {
 
   const { tool, zoom, canUndo, canRedo } = canvasState;
 
-  return (
-    <>
-      <div className="dc-history-controls">
-        <ToolButton label="撤销" disabled={!canUndo} onClick={() => editor.undo()}>
-          <Undo2 size={17} />
-        </ToolButton>
-        <ToolButton label="重做" disabled={!canRedo} onClick={() => editor.redo()}>
-          <Redo2 size={17} />
-        </ToolButton>
-      </div>
-
+  if (variant === 'toolbar') {
+    return (
       <div className="dc-canvas-toolbar" role="toolbar" aria-label="画布工具">
         <ToolButton label="选择" active={tool === 'select'} onClick={() => setCurrentTool('select')}>
           <MousePointer2 size={18} />
@@ -318,7 +315,19 @@ function CanvasControls({ editor }: { editor: Editor }) {
           <ArrowRight size={18} />
         </ToolButton>
       </div>
+    );
+  }
 
+  return (
+    <>
+      <div className="dc-history-controls">
+        <ToolButton label="撤销" disabled={!canUndo} onClick={() => editor.undo()}>
+          <Undo2 size={17} />
+        </ToolButton>
+        <ToolButton label="重做" disabled={!canRedo} onClick={() => editor.redo()}>
+          <Redo2 size={17} />
+        </ToolButton>
+      </div>
       <div className="dc-zoom-controls">
         <ToolButton label="缩小" onClick={() => editor.zoomOut(editor.getViewportScreenCenter())}>
           <ZoomOut size={16} />
@@ -691,6 +700,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
           <div className="dc-product-mark"><Layers3 size={15} /></div>
           <div className="dc-project-name">{project.name}</div>
         </div>
+        {editor ? <CanvasControls editor={editor} variant="toolbar" /> : null}
         <div className="dc-topbar-right">
           <span className="dc-local-badge">LOCAL</span>
           <SaveIndicator
@@ -715,7 +725,7 @@ export default function DesignCanvasWorkspace({ projectId }: { projectId: string
             snapshot={canvasDocument?.snapshot as unknown as TLEditorSnapshot | undefined}
             options={tldrawOptions}
           />
-          {editor ? <CanvasControls editor={editor} /> : null}
+          {editor ? <CanvasControls editor={editor} variant="stage" /> : null}
           <CanvasPromptComposer
             editor={editor}
             running={generationRunning}
