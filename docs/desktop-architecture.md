@@ -58,7 +58,9 @@ Zustand
   transient UI state only
 ```
 
-Canvas shapes must reference heavy assets by ID. Dragging a visible right output port onto a left input port shows a live connection preview and creates an explicit tldraw arrow binding; click-output then click-input is retained as a fallback. These bindings are compiled into `project_graphs` before each run, and freeform visual position is never an execution dependency. Generation-to-generation edges pass output asset references, image URLs, and seeds into downstream `img2img` parameters.
+Canvas shapes must reference heavy assets by ID. Dragging the enlarged hit target around a visible right output port onto a left input port shows a live connection preview and creates an exact, center-anchored curved tldraw arrow binding; click-output then click-input is retained as a fallback. Existing card connections are normalized on load. These bindings are compiled into `project_graphs` before each run, and freeform visual position is never an execution dependency. Generation-to-generation edges pass output asset references, image URLs, and seeds into downstream `img2img` parameters.
+
+Generation cards are directly operable on the canvas: prompt editing, model and ratio selection, advanced inspector access, and node execution are all visible. Card actions select the node and coordinate with the Agent panel through typed local UI events. Store listeners persist both user gestures and programmatic updates, including arrows, parameters, status changes, and generated results.
 
 ## Native Database
 

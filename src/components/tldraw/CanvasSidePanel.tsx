@@ -36,10 +36,17 @@ export type GenerationCardInput = GenerationNodeInput;
 interface CanvasSidePanelProps {
   editor: Editor | null;
   projectId: string;
+  inspectorRequestId: number;
+  runRequest: GenerationRunRequest | null;
   onCreateTask: (title: string, body: string) => void;
   onCreateGeneration: (input: GenerationCardInput, afterShapeId?: TLShapeId) => TLShapeId | null;
   onImportAssets: () => Promise<number>;
   onCollapse: () => void;
+}
+
+export interface GenerationRunRequest {
+  id: number;
+  shapeId: TLShapeId;
 }
 
 interface ImageModel {
@@ -53,6 +60,7 @@ interface WorkflowSummary {
   edges: number;
   error: string | null;
   selectedGenerationId: TLShapeId | null;
+  selectedGenerationFingerprint: string | null;
 }
 
 interface AgentMessage {
@@ -76,11 +84,25 @@ const defaultGenerationInput: GenerationCardInput = {
 };
 
 function readWorkflowSummary(editor: Editor | null): WorkflowSummary {
-  if (!editor) return { nodes: 0, edges: 0, error: null, selectedGenerationId: null };
+  if (!editor) {
+    return {
+      nodes: 0,
+      edges: 0,
+      error: null,
+      selectedGenerationId: null,
+      selectedGenerationFingerprint: null,
+    };
+  }
   const selectedGenerationId = editor.getSelectedShapeIds().find((shapeId) => {
     const shape = editor.getShape<DesignCardShape>(shapeId);
     return shape?.type === DESIGN_CARD_TYPE && shape.props.kind === 'generate';
   }) ?? null;
+  const selectedGeneration = selectedGenerationId
+    ? editor.getShape<DesignCardShape>(selectedGenerationId)
+    : undefined;
+  const selectedGenerationFingerprint = selectedGeneration?.type === DESIGN_CARD_TYPE
+    ? JSON.stringify(getGenerationNodeInput(selectedGeneration))
+    : null;
   try {
     const graph = compileGenerationWorkflow(editor);
     return {
@@ -88,6 +110,7 @@ function readWorkflowSummary(editor: Editor | null): WorkflowSummary {
       edges: graph.edges.length,
       error: null,
       selectedGenerationId,
+      selectedGenerationFingerprint,
     };
   } catch (error) {
     return {
@@ -98,6 +121,7 @@ function readWorkflowSummary(editor: Editor | null): WorkflowSummary {
       edges: 0,
       error: error instanceof Error ? error.message : '工作流连接无效',
       selectedGenerationId,
+      selectedGenerationFingerprint,
     };
   }
 }
@@ -105,6 +129,8 @@ function readWorkflowSummary(editor: Editor | null): WorkflowSummary {
 export default function CanvasSidePanel({
   editor,
   projectId,
+  inspectorRequestId,
+  runRequest,
   onCreateTask,
   onCreateGeneration,
   onImportAssets,
@@ -112,7 +138,10 @@ export default function CanvasSidePanel({
 }: CanvasSidePanelProps) {
   const ready = Boolean(editor);
   const messageIdRef = useRef(0);
+  const lastRunRequestIdRef = useRef(0);
+  const runWorkflowRef = useRef<(startNodeId?: TLShapeId) => Promise<void>>(async () => {});
   const [mode, setMode] = useState<PanelMode>('agent');
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [agentPrompt, setAgentPrompt] = useState('');
   const [composerAction, setComposerAction] = useState<ComposerAction>('generate');
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
@@ -141,7 +170,13 @@ export default function CanvasSidePanel({
     if (selected?.type === DESIGN_CARD_TYPE && selected.props.kind === 'generate') {
       setGenerationInput(getGenerationNodeInput(selected));
     }
-  }, [editor, workflow.selectedGenerationId]);
+  }, [editor, workflow.selectedGenerationFingerprint, workflow.selectedGenerationId]);
+
+  useEffect(() => {
+    if (inspectorRequestId === 0) return;
+    setMode('agent');
+    setInspectorOpen(true);
+  }, [inspectorRequestId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -243,6 +278,15 @@ export default function CanvasSidePanel({
     }
   };
 
+  runWorkflowRef.current = runWorkflow;
+
+  useEffect(() => {
+    if (!runRequest || runRequest.id === lastRunRequestIdRef.current) return;
+    lastRunRequestIdRef.current = runRequest.id;
+    setMode('agent');
+    void runWorkflowRef.current(runRequest.shapeId);
+  }, [runRequest]);
+
   const importAssets = async () => {
     if (!ready || importing) return;
     setImporting(true);
@@ -307,7 +351,11 @@ export default function CanvasSidePanel({
           </div>
 
           {workflow.selectedGenerationId ? (
-            <details className="dc-node-inspector">
+            <details
+              className="dc-node-inspector"
+              open={inspectorOpen}
+              onToggle={(event) => setInspectorOpen(event.currentTarget.open)}
+            >
               <summary>
                 <SlidersHorizontal size={15} />
                 <span>节点设置</span>

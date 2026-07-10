@@ -33,12 +33,14 @@ The main freeform canvas uses the same core canvas SDK family observed in Lovart
 - Lovart-style Agent composer as the primary right-panel interaction
 - selected-node prompts create a downstream iteration card and connect it automatically
 - generation parameters are available only in a collapsed contextual inspector
-- visible card input/output ports support ComfyUI-style drag-to-connect and click-to-connect without requiring toolbar discovery
+- visible card ports use enlarged hit targets and exact center anchors for persistent curved drag-to-connect bindings; click-to-connect remains available
+- generation cards expose prompt, model, ratio, advanced settings, and run controls directly on the canvas
 - tldraw arrow bindings compile into a directed generation graph with cycle validation
 - run-all and run-from-selected execution with text context, image references, and seed propagation
 - execution graph snapshot persisted to `project_graphs` before each run
 - generated result previews and editable downstream iteration nodes
 - debounced document and camera autosave with optimistic version checks
+- autosave observes both direct gestures and programmatic graph/node updates
 - hard redirects from former project and feature routes into the new workspace
 - Next.js 16.2.10 and React 19.2.7 security baseline
 

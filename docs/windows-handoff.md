@@ -62,15 +62,16 @@ Set `DESIGNCANVAS_OPEN_DEVTOOLS=1` before the desktop command only when DevTools
 5. Add brief, note, asset, task, and generation cards.
 6. Resize and move cards; use undo and redo.
 7. Draw, add text, and create a frame.
-8. Drag a card's right output port onto a generation card's left input port; confirm the live curve turns blue over the target and the Agent panel shows one valid connection after release.
-9. Select a generation node, submit an iteration through the Agent composer, and confirm a connected downstream node appears.
-10. Run all nodes, then edit the downstream node through the collapsed inspector and run from the selected node; confirm both result previews update.
-11. Add a reverse connection, confirm cycle validation blocks execution, then undo it.
-12. Collapse and reopen the right panel; confirm only Agent and Assets tabs exist and the composer remains the primary Agent surface.
-13. Wait for the saved indicator, close the project, reopen it, and confirm content plus camera position survived.
-14. Import a local asset and confirm an asset card appears.
-15. Confirm `/projects/<id>` redirects to `/projects/<id>/canvas`.
-16. Disable networking and repeat open/edit/save for the existing project.
+8. Drag from the enlarged hit target around a card's right output dot onto a generation card's left input dot; confirm the live curve turns blue, the saved curve terminates at both dot centers, and the connection survives reload.
+9. Edit the prompt, switch model and ratio, open advanced parameters, and run directly from a generation card; confirm the Agent panel stays synchronized.
+10. Select a generation node, submit an iteration through the Agent composer, and confirm a connected downstream node appears.
+11. Run all nodes, then edit the downstream node through the inspector and run from the selected node; confirm both result previews update.
+12. Add a reverse connection, confirm cycle validation blocks execution, then undo it.
+13. Collapse and reopen the right panel; confirm only Agent and Assets tabs exist and the composer remains the primary Agent surface.
+14. Wait for the saved indicator, close the project, reopen it, and confirm content, connections, parameters, results, and camera position survived.
+15. Import a local asset and confirm an asset card appears.
+16. Confirm `/projects/<id>` redirects to `/projects/<id>/canvas`.
+17. Disable networking and repeat open/edit/save for the existing project.
 
 Electron data is stored under `app.getPath('userData')`, normally `%APPDATA%\DesignCanvas` on Windows. It is not stored in the repository checkout. Set `DESIGNCANVAS_USER_DATA_DIR` only when an isolated smoke-test profile is required.
 

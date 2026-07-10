@@ -2,14 +2,16 @@ import {
   BaseBoxShapeUtil,
   HTMLContainer,
   T,
+  useEditor,
   type RecordProps,
   type TLShape,
 } from 'tldraw';
-import { ImageIcon, Sparkles } from 'lucide-react';
-import { useRef } from 'react';
+import { ImageIcon, LoaderCircle, Play, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 
 export const DESIGN_CARD_TYPE = 'design-card' as const;
 export const DESIGN_CARD_PORT_EVENT = 'designcanvas:card-port';
+export const DESIGN_CARD_ACTION_EVENT = 'designcanvas:card-action';
 export type DesignCardKind = 'brief' | 'note' | 'asset' | 'task' | 'generate';
 export type DesignCardPortRole = 'input' | 'output';
 export type DesignCardPortPhase = 'click' | 'drag-start' | 'drag-move' | 'drag-end' | 'drag-cancel';
@@ -21,6 +23,11 @@ export interface DesignCardPortEventDetail {
   clientX?: number;
   clientY?: number;
   targetShapeId?: DesignCardShape['id'];
+}
+
+export interface DesignCardActionEventDetail {
+  action: 'edit' | 'run';
+  shapeId: DesignCardShape['id'];
 }
 
 export interface DesignCardProps {
@@ -69,6 +76,48 @@ const generationStatusLabel: Record<NonNullable<DesignCardProps['status']>, stri
   error: '失败',
 };
 
+const generationRatios = ['1:1', '3:2', '4:5', '16:9'] as const;
+
+interface GenerationModelOption {
+  model_id: string;
+  display_name: string;
+  capabilities: string[];
+}
+
+let generationModelsPromise: Promise<GenerationModelOption[]> | null = null;
+
+function loadGenerationModels() {
+  if (!generationModelsPromise) {
+    generationModelsPromise = fetch('/api/settings/models?enabled=true')
+      .then((response) => response.json())
+      .then((payload: { success?: boolean; data?: GenerationModelOption[] }) => (
+        payload.success && payload.data
+          ? payload.data.filter((model) => (
+            model.capabilities.includes('text2img') || model.capabilities.includes('img2img')
+          ))
+          : []
+      ))
+      .catch(() => []);
+  }
+  return generationModelsPromise;
+}
+
+function useGenerationModels() {
+  const [models, setModels] = useState<GenerationModelOption[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void loadGenerationModels().then((nextModels) => {
+      if (!cancelled) setModels(nextModels);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  return models;
+}
+
+function stopCanvasEvent(event: SyntheticEvent) {
+  event.stopPropagation();
+}
+
 function ConnectionPort({
   shapeId,
   role,
@@ -80,12 +129,14 @@ function ConnectionPort({
 }) {
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const didDragRef = useRef(false);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
   const label = role === 'output' ? `从“${title}”连接` : `连接到“${title}”`;
   const dispatchPortEvent = (detail: Omit<DesignCardPortEventDetail, 'shapeId' | 'role'>) => {
     window.dispatchEvent(new CustomEvent(DESIGN_CARD_PORT_EVENT, {
       detail: { ...detail, shapeId, role } satisfies DesignCardPortEventDetail,
     }));
   };
+  useEffect(() => () => dragCleanupRef.current?.(), []);
   return (
     <button
       type="button"
@@ -98,56 +149,65 @@ function ConnectionPort({
         event.preventDefault();
         event.stopPropagation();
         if (role !== 'output') return;
+        dragCleanupRef.current?.();
         dragStartRef.current = { x: event.clientX, y: event.clientY };
         didDragRef.current = false;
-        event.currentTarget.setPointerCapture(event.pointerId);
+        const pointerId = event.pointerId;
+        const cleanup = () => {
+          window.removeEventListener('pointermove', handlePointerMove, true);
+          window.removeEventListener('pointerup', handlePointerUp, true);
+          window.removeEventListener('pointercancel', handlePointerCancel, true);
+          dragCleanupRef.current = null;
+        };
+        const handlePointerMove = (moveEvent: PointerEvent) => {
+          if (moveEvent.pointerId !== pointerId || !dragStartRef.current) return;
+          moveEvent.preventDefault();
+          moveEvent.stopPropagation();
+          const start = dragStartRef.current;
+          if (Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) > 4) {
+            didDragRef.current = true;
+          }
+          if (!didDragRef.current) return;
+          const targetPort = document
+            .elementFromPoint(moveEvent.clientX, moveEvent.clientY)
+            ?.closest<HTMLElement>('[data-connection-port="input"]');
+          dispatchPortEvent({
+            phase: 'drag-move',
+            clientX: moveEvent.clientX,
+            clientY: moveEvent.clientY,
+            targetShapeId: targetPort?.dataset.connectionShapeId as DesignCardShape['id'] | undefined,
+          });
+        };
+        const finishPointerDrag = (finishEvent: PointerEvent, cancelled: boolean) => {
+          if (finishEvent.pointerId !== pointerId || !dragStartRef.current) return;
+          finishEvent.preventDefault();
+          finishEvent.stopPropagation();
+          const didDrag = didDragRef.current;
+          dragStartRef.current = null;
+          cleanup();
+          if (cancelled || !didDrag) {
+            if (cancelled) didDragRef.current = false;
+            dispatchPortEvent({ phase: 'drag-cancel' });
+            return;
+          }
+          const targetPort = document
+            .elementFromPoint(finishEvent.clientX, finishEvent.clientY)
+            ?.closest<HTMLElement>('[data-connection-port="input"]');
+          const targetShapeId = targetPort?.dataset.connectionShapeId as DesignCardShape['id'] | undefined;
+          dispatchPortEvent({
+            phase: targetShapeId ? 'drag-end' : 'drag-cancel',
+            clientX: finishEvent.clientX,
+            clientY: finishEvent.clientY,
+            targetShapeId,
+          });
+        };
+        const handlePointerUp = (upEvent: PointerEvent) => finishPointerDrag(upEvent, false);
+        const handlePointerCancel = (cancelEvent: PointerEvent) => finishPointerDrag(cancelEvent, true);
+        window.addEventListener('pointermove', handlePointerMove, true);
+        window.addEventListener('pointerup', handlePointerUp, true);
+        window.addEventListener('pointercancel', handlePointerCancel, true);
+        dragCleanupRef.current = cleanup;
         dispatchPortEvent({ phase: 'drag-start', clientX: event.clientX, clientY: event.clientY });
-      }}
-      onPointerMove={(event) => {
-        const start = dragStartRef.current;
-        if (!start || role !== 'output') return;
-        if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 4) {
-          didDragRef.current = true;
-        }
-        if (!didDragRef.current) return;
-        const targetPort = document
-          .elementFromPoint(event.clientX, event.clientY)
-          ?.closest<HTMLElement>('[data-connection-port="input"]');
-        dispatchPortEvent({
-          phase: 'drag-move',
-          clientX: event.clientX,
-          clientY: event.clientY,
-          targetShapeId: targetPort?.dataset.connectionShapeId as DesignCardShape['id'] | undefined,
-        });
-      }}
-      onPointerUp={(event) => {
-        if (!dragStartRef.current || role !== 'output') return;
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-          event.currentTarget.releasePointerCapture(event.pointerId);
-        }
-        dragStartRef.current = null;
-        if (!didDragRef.current) {
-          dispatchPortEvent({ phase: 'drag-cancel' });
-          return;
-        }
-        const targetPort = document
-          .elementFromPoint(event.clientX, event.clientY)
-          ?.closest<HTMLElement>('[data-connection-port="input"]');
-        const targetShapeId = targetPort?.dataset.connectionShapeId as DesignCardShape['id'] | undefined;
-        dispatchPortEvent({
-          phase: targetShapeId ? 'drag-end' : 'drag-cancel',
-          clientX: event.clientX,
-          clientY: event.clientY,
-          targetShapeId,
-        });
-      }}
-      onPointerCancel={(event) => {
-        if (!dragStartRef.current || role !== 'output') return;
-        dragStartRef.current = null;
-        didDragRef.current = false;
-        dispatchPortEvent({ phase: 'drag-cancel', clientX: event.clientX, clientY: event.clientY });
       }}
       onClick={(event) => {
         event.preventDefault();
@@ -161,6 +221,133 @@ function ConnectionPort({
     >
       <span />
     </button>
+  );
+}
+
+function GenerationCard({ shape }: { shape: DesignCardShape }) {
+  const editor = useEditor();
+  const models = useGenerationModels();
+  const {
+    title,
+    body,
+    eyebrow,
+    outputUrl,
+    status = 'draft',
+    error,
+    prompt = body,
+    modelId = 'mock:default',
+    ratio = '1:1',
+  } = shape.props;
+  const modelOptions = models.some((model) => model.model_id === modelId)
+    ? models
+    : [{ model_id: modelId, display_name: modelId, capabilities: [] }, ...models];
+  const selectCard = () => {
+    editor.select(shape.id);
+    editor.setCurrentTool('select');
+  };
+  const updateGeneration = (patch: Partial<DesignCardProps>) => {
+    editor.updateShape<DesignCardShape>({
+      id: shape.id,
+      type: DESIGN_CARD_TYPE,
+      props: {
+        ...patch,
+        status: 'draft',
+        outputUrl: '',
+        outputAssetId: '',
+        error: '',
+      },
+    });
+  };
+  const dispatchAction = (action: DesignCardActionEventDetail['action']) => {
+    selectCard();
+    window.dispatchEvent(new CustomEvent(DESIGN_CARD_ACTION_EVENT, {
+      detail: { action, shapeId: shape.id } satisfies DesignCardActionEventDetail,
+    }));
+  };
+
+  return (
+    <HTMLContainer
+      className="dc-generation-card"
+      data-testid="generation-card-shape"
+      style={{ pointerEvents: 'all' }}
+    >
+      <ConnectionPort shapeId={shape.id} role="input" title={title} />
+      <ConnectionPort shapeId={shape.id} role="output" title={title} />
+      <div
+        className="dc-generation-card__preview"
+        data-status={status}
+        style={outputUrl ? { backgroundImage: `url(${JSON.stringify(outputUrl)})` } : undefined}
+      >
+        {!outputUrl ? <div className="dc-generation-card__symbol"><ImageIcon size={24} /></div> : null}
+        <span><Sparkles size={12} /> GENERATION DRAFT</span>
+      </div>
+      <div className="dc-generation-card__content">
+        <div className="dc-generation-card__meta">
+          <span>{eyebrow}</span>
+          <span className="dc-generation-card__state" data-status={status}>{generationStatusLabel[status]}</span>
+        </div>
+        <div className="dc-generation-card__title">{title}</div>
+        <div className="dc-generation-card__prompt">{status === 'error' && error ? error : body}</div>
+      </div>
+      <div
+        className="dc-generation-card__composer"
+        onPointerDown={stopCanvasEvent}
+        onDoubleClick={stopCanvasEvent}
+        onKeyDown={stopCanvasEvent}
+      >
+        <textarea
+          aria-label={`${title}提示词`}
+          value={prompt}
+          placeholder="描述想生成的画面…"
+          rows={2}
+          onFocus={selectCard}
+          onChange={(event) => updateGeneration({
+            prompt: event.target.value,
+            body: event.target.value || '描述主体、构图、光线和视觉风格。',
+          })}
+        />
+        <div className="dc-generation-card__composer-footer">
+          <select
+            aria-label={`${title}模型`}
+            title="选择生成模型"
+            value={modelId}
+            onFocus={selectCard}
+            onChange={(event) => updateGeneration({ modelId: event.target.value })}
+          >
+            {modelOptions.map((model) => (
+              <option key={model.model_id} value={model.model_id}>{model.display_name}</option>
+            ))}
+          </select>
+          <select
+            aria-label={`${title}画幅比例`}
+            title="选择画幅比例"
+            value={ratio}
+            onFocus={selectCard}
+            onChange={(event) => updateGeneration({
+              ratio: event.target.value,
+              eyebrow: `GENERATION · ${event.target.value}`,
+            })}
+          >
+            {generationRatios.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+          <button type="button" aria-label="更多生成参数" title="更多生成参数" onClick={() => dispatchAction('edit')}>
+            <SlidersHorizontal size={15} />
+          </button>
+          <button
+            type="button"
+            className="dc-generation-card__run"
+            aria-label="运行此生成节点"
+            title="运行此生成节点"
+            disabled={!prompt.trim() || status === 'running' || status === 'queued'}
+            onClick={() => dispatchAction('run')}
+          >
+            {status === 'running' || status === 'queued'
+              ? <LoaderCircle className="dc-spin" size={15} />
+              : <Play size={15} fill="currentColor" />}
+          </button>
+        </div>
+      </div>
+    </HTMLContainer>
   );
 }
 
@@ -208,34 +395,9 @@ export class DesignCardShapeUtil extends BaseBoxShapeUtil<DesignCardShape> {
   }
 
   component(shape: DesignCardShape) {
-    const { kind, title, body, eyebrow, outputUrl, status = 'draft', error } = shape.props;
+    const { kind, title, body, eyebrow } = shape.props;
     if (kind === 'generate') {
-      return (
-        <HTMLContainer
-          className="dc-generation-card"
-          data-testid="generation-card-shape"
-          style={{ pointerEvents: 'all' }}
-        >
-          <ConnectionPort shapeId={shape.id} role="input" title={title} />
-          <ConnectionPort shapeId={shape.id} role="output" title={title} />
-          <div
-            className="dc-generation-card__preview"
-            data-status={status}
-            style={outputUrl ? { backgroundImage: `url(${JSON.stringify(outputUrl)})` } : undefined}
-          >
-            {!outputUrl ? <div className="dc-generation-card__symbol"><ImageIcon size={24} /></div> : null}
-            <span><Sparkles size={12} /> GENERATION DRAFT</span>
-          </div>
-          <div className="dc-generation-card__content">
-            <div className="dc-generation-card__meta">
-              <span>{eyebrow}</span>
-              <span className="dc-generation-card__state" data-status={status}>{generationStatusLabel[status]}</span>
-            </div>
-            <div className="dc-generation-card__title">{title}</div>
-            <div className="dc-generation-card__prompt">{status === 'error' && error ? error : body}</div>
-          </div>
-        </HTMLContainer>
-      );
+      return <GenerationCard shape={shape} />;
     }
 
     return (

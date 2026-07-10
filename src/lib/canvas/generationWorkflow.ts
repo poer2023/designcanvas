@@ -93,6 +93,18 @@ function toFiniteNumber(value: number | undefined, fallback: number) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+function getConnectionBend(
+  sourceBounds: NonNullable<ReturnType<Editor['getShapePageBounds']>>,
+  targetBounds: NonNullable<ReturnType<Editor['getShapePageBounds']>>
+) {
+  const distance = Math.hypot(
+    targetBounds.center.x - sourceBounds.center.x,
+    targetBounds.center.y - sourceBounds.center.y
+  );
+  const bend = clamp(distance * 0.025, 4, 18);
+  return targetBounds.center.y < sourceBounds.center.y ? bend : -bend;
+}
+
 export function getGenerationNodeInput(shape: DesignCardShape): GenerationNodeInput {
   const prompt = (shape.props.prompt || shape.props.body || '').trim();
   const ratio = GENERATION_RATIOS.includes(shape.props.ratio as GenerationRatio)
@@ -209,9 +221,10 @@ export function connectDesignCards(
     x: start.x,
     y: start.y,
     props: {
+      kind: 'arc',
       start: { x: 0, y: 0 },
       end: { x: end.x - start.x, y: end.y - start.y },
-      bend: 0,
+      bend: getConnectionBend(sourceBounds, targetBounds),
       size: 's',
       dash: 'solid',
       color: 'black',
@@ -226,8 +239,9 @@ export function connectDesignCards(
       props: {
         terminal: 'start',
         normalizedAnchor: { x: targetIsRight ? 1 : 0, y: 0.5 },
-        isExact: false,
-        isPrecise: false,
+        isExact: true,
+        isPrecise: true,
+        snap: 'none',
       },
     },
     {
@@ -237,14 +251,94 @@ export function connectDesignCards(
       props: {
         terminal: 'end',
         normalizedAnchor: { x: targetIsRight ? 0 : 1, y: 0.5 },
-        isExact: false,
-        isPrecise: false,
+        isExact: true,
+        isPrecise: true,
+        snap: 'none',
       },
     },
   ]);
   editor.select(targetId);
   editor.setCurrentTool('select');
   return arrowId;
+}
+
+export function normalizeDesignCardConnections(editor: Editor) {
+  let updatedCount = 0;
+  editor.run(() => {
+    for (const shape of editor.getCurrentPageShapes()) {
+      if (shape.type !== 'arrow') continue;
+      const arrow = shape as TLArrowShape;
+      const bindings = editor.getBindingsFromShape<TLArrowBinding>(arrow, 'arrow');
+      const start = bindings.find((binding) => binding.props.terminal === 'start');
+      const end = bindings.find((binding) => binding.props.terminal === 'end');
+      if (!start || !end) continue;
+
+      const source = editor.getShape<DesignCardShape>(start.toId);
+      const target = editor.getShape<DesignCardShape>(end.toId);
+      if (
+        !source
+        || source.type !== DESIGN_CARD_TYPE
+        || !target
+        || target.type !== DESIGN_CARD_TYPE
+        || target.props.kind !== 'generate'
+      ) continue;
+
+      const sourceBounds = editor.getShapePageBounds(source);
+      const targetBounds = editor.getShapePageBounds(target);
+      if (!sourceBounds || !targetBounds) continue;
+      const targetIsRight = targetBounds.center.x >= sourceBounds.center.x;
+      const nextStartAnchor = { x: targetIsRight ? 1 : 0, y: 0.5 };
+      const nextEndAnchor = { x: targetIsRight ? 0 : 1, y: 0.5 };
+      const nextBend = getConnectionBend(sourceBounds, targetBounds);
+      const needsBindingUpdate = (
+        !start.props.isExact
+        || !start.props.isPrecise
+        || start.props.normalizedAnchor.x !== nextStartAnchor.x
+        || start.props.normalizedAnchor.y !== nextStartAnchor.y
+        || !end.props.isExact
+        || !end.props.isPrecise
+        || end.props.normalizedAnchor.x !== nextEndAnchor.x
+        || end.props.normalizedAnchor.y !== nextEndAnchor.y
+      );
+      const needsArrowUpdate = arrow.props.kind !== 'arc' || Math.abs(arrow.props.bend - nextBend) > 0.1;
+      if (!needsBindingUpdate && !needsArrowUpdate) continue;
+
+      editor.updateBindings([
+        {
+          id: start.id,
+          type: 'arrow',
+          props: {
+            normalizedAnchor: nextStartAnchor,
+            isExact: true,
+            isPrecise: true,
+            snap: 'none',
+          },
+        },
+        {
+          id: end.id,
+          type: 'arrow',
+          props: {
+            normalizedAnchor: nextEndAnchor,
+            isExact: true,
+            isPrecise: true,
+            snap: 'none',
+          },
+        },
+      ]);
+      if (needsArrowUpdate) {
+        editor.updateShape<TLArrowShape>({
+          id: arrow.id,
+          type: 'arrow',
+          props: {
+            kind: 'arc',
+            bend: nextBend,
+          },
+        });
+      }
+      updatedCount += 1;
+    }
+  }, { history: 'ignore' });
+  return updatedCount;
 }
 
 export function serializeGenerationWorkflow(
